@@ -1,5 +1,4 @@
 /venv/
-/assets
 /output*
 /prediction*
 /__pycache__

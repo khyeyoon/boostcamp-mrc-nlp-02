@@ -2,3 +2,4 @@
 /output*
 /prediction*
 *__pycache__
+*.sh

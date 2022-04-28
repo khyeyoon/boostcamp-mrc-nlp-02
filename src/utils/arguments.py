@@ -35,7 +35,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="/opt/ml/input/data/train_dataset",     # absolute path
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -54,7 +54,7 @@ class DataTrainingArguments:
         },
     )
     pad_to_max_length: bool = field(
-        default=False,
+        default=True,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
@@ -68,7 +68,7 @@ class DataTrainingArguments:
         },
     )
     max_answer_length: int = field(
-        default=30,
+        default=100,    # 30, max_length in train == 83 in valid == 64
         metadata={
             "help": "The maximum length of an answer that can be generated. This is needed because the start "
             "and end predictions are not conditioned on one another."
@@ -87,6 +87,6 @@ class DataTrainingArguments:
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
     )
-    use_faiss: bool = field(
-        default=False, metadata={"help": "Whether to build with faiss"}
+    use_faiss: bool = field( # False
+        default=True, metadata={"help": "Whether to build with faiss"}
     )

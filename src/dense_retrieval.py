@@ -203,7 +203,7 @@ class DenseRetrieval:
                     if loss<global_loss:
                         global_loss=loss
                         # model save
-                        save_path= './' + self.additional_args.save_dir
+                        save_path= self.additional_args.save_dir
                         os.makedirs(save_path, exist_ok=True)
                         self.p_encoder.save_pretrained(os.path.join(save_path, f"p_encoder-{self.additional_args.report_name}"))
                         self.q_encoder.save_pretrained(os.path.join(save_path, f"q_encoder-{self.additional_args.report_name}"))
@@ -289,7 +289,7 @@ class BertEncoder(BertPreTrainedModel):
 def main(args):
     
     if args.wandb=='True':
-        wandb.init(project="MRC_retrieval", entity="salt-bread", name="BERT_squad_kor_v1_batch2")
+        wandb.init(project=args.project_name, entity="salt-bread", name="BERT_squad_kor_v1_batch2")
 
     # 대회 데이터셋 불러오기
     dataset_train = load_from_disk("../data/train_dataset/")
@@ -299,12 +299,12 @@ def main(args):
     # train_dataset = load_dataset("squad_kor_v1")['train']
 
     train_args = TrainingArguments(
-        output_dir="dense_retireval",
+        output_dir= args.save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
         per_device_eval_batch_size=args.batch_size,
-        num_train_epochs=2,
+        num_train_epochs=args.epochs,
         weight_decay=0.01,
     )
 
@@ -315,7 +315,7 @@ def main(args):
     p_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
     q_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
 
-    retriever = DenseRetrieval(args=[train_args,args], dataset=train_dataset, num_neg=1, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
+    retriever = DenseRetrieval(args=[train_args,args], dataset=train_dataset, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
     retriever.train()
 
     if args.test_query=='True':
@@ -329,7 +329,7 @@ def main(args):
         # Retriever는 아래와 같이 사용할 수 있도록 코드를 짜봅시다.
         dataset_val = load_from_disk("../data/train_dataset/")
         dataset_val = dataset_val['train']
-        retriever = DenseRetrieval(args=[train_args,args], dataset=dataset_val, num_neg=1, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
+        retriever = DenseRetrieval(args=[train_args,args], dataset=dataset_val, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
 
         index = 200
         # query = '모든 악티늄족의 공통적인 자기적 성질은?' 
@@ -353,6 +353,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=2)
     parser.add_argument('--topk', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--num_neg', type=int, default=3)
     parser.add_argument('--save_dir', type=str, default="./dense_retrieval")
     parser.add_argument('--report_name', type=str)
     parser.add_argument('--project_name', type=str, default="MRC_retrieval")

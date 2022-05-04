@@ -289,7 +289,7 @@ class BertEncoder(BertPreTrainedModel):
 def main(args):
     
     if args.wandb=='True':
-        wandb.init(project=args.project_name, entity="salt-bread", name="BERT_squad_kor_v1_batch2")
+        wandb.init(project=args.project_name, entity="salt-bread", name=args.report_name)
 
     # 대회 데이터셋 불러오기
     dataset_train = load_from_disk("../data/train_dataset/")

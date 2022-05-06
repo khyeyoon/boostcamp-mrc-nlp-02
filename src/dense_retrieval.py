@@ -1,28 +1,41 @@
-import json
-import random
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+import torch.nn.functional as F
 import numpy as np
 import pandas as pd
+
+import json
+import random
 from tqdm.auto import tqdm
 from pprint import pprint
 import wandb
 import argparse
 import os 
-from datasets import load_from_disk
-
+import time
+from datasets import load_from_disk, load_dataset
+from typing import List, NoReturn, Optional, Tuple, Union
+from datasets import (
+    Dataset,
+    DatasetDict,
+)
+from arguments import DataTrainingArguments, ModelArguments
+from contextlib import contextmanager
+from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-import torch
-from torch.utils.data import DataLoader, TensorDataset
-import torch.nn.functional as F
-
-from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
     BertModel, BertPreTrainedModel,
     AdamW, get_linear_schedule_with_warmup,
     TrainingArguments,
+    HfArgumentParser,
 )
-from rank_bm25 import BM25Okapi
+
+@contextmanager
+def timer(name):
+    t0 = time.time()
+    yield
+    print(f"[{name}] done in {time.time() - t0:.3f} s")
 
 # 난수 고정
 def set_seed(random_seed):
@@ -34,17 +47,9 @@ def set_seed(random_seed):
     
 set_seed(42) # magic number :)
 
-print ("PyTorch version:[%s]."%(torch.__version__))
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print ("device:[%s]."%(device))
-
-
 class DenseRetrieval:
-    def __init__(self, args, dataset, num_neg, tokenizer, p_encoder, q_encoder):
+    def __init__(self, args, dataset, tokenizer, p_encoder, q_encoder, num_neg=2, mode='train', bm25=False):
 
-        '''
-        학습과 추론에 사용될 여러 셋업을 마쳐봅시다.
-        '''
         self.args = args[0]
         self.additional_args = args[1]
         self.dataset = dataset
@@ -53,57 +58,257 @@ class DenseRetrieval:
         self.tokenizer = tokenizer
         self.p_encoder = p_encoder
         self.q_encoder = q_encoder
+        self.bm25 = False
+        self.q_embs = None
+        self.p_embs = None
+        self.mode = mode
 
-        self.prepare_in_batch_negative(num_neg=num_neg)
+        if bm25=='True':
+            corpus = np.array(list(set([example for example in self.dataset['context']])))
 
-        self.bm25 = None # BM25Okapi(tokenized_corpus)
+            tokenized_corpus = [self.split_space(doc) for doc in corpus]
+            self.bm25 = BM25Okapi(tokenized_corpus)
+
+        if mode=='train':
+            self.prepare_in_batch_negative()
+
+        else:
+            # infernce를 위한 passages 임베딩 시 수행 (default=train)
+            if mode=='inference':
+                self.get_dense_embedding(dataset)
+            else:
+                self.get_dense_embedding(dataset)
+                self.compute_topk()
+
+    def retrieve(
+        self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
+    ) -> Union[Tuple[List, List], pd.DataFrame]:
+
+        assert self.p_embs is not None, "get_dense_embedding() 메소드를 먼저 수행해줘야합니다."
+
+        if isinstance(query_or_dataset, str):
+            doc_scores, doc_indices = self.get_relevant_doc(query_or_dataset, k=topk)
+            print("[Search query]\n", query_or_dataset, "\n")
+
+            for i in range(topk):
+                print(f"Top-{i+1} passage with score {doc_scores[i]:4f}")
+                print(self.contexts[doc_indices[i]])
+
+            return (doc_scores, [self.contexts[doc_indices[i]] for i in range(topk)])
+
+        elif isinstance(query_or_dataset, Dataset):
+
+            # Retrieve한 Passage를 pd.DataFrame으로 반환합니다.
+            total = []
+            with timer("query exhaustive search"):
+                doc_scores, doc_indices = self.get_relevant_doc_bulk(
+                    query_or_dataset["question"], k=topk
+                )
+            for idx, example in enumerate(
+                tqdm(query_or_dataset, desc="Dense retrieval: ")
+            ):
+                tmp = {
+                    # Query와 해당 id를 반환합니다.
+                    "question": example["question"],
+                    "id": example["id"],
+                    # Retrieve한 Passage의 id, context를 반환합니다.
+                    "context_id": doc_indices[idx],
+                    "context": " ".join(
+                        [self.contexts[pid] for pid in doc_indices[idx]]
+                    ),
+                }
+                if "context" in example.keys() and "answers" in example.keys():
+                    # validation 데이터를 사용하면 ground_truth context와 answer도 반환합니다.
+                    tmp["original_context"] = example["context"]
+                    tmp["answers"] = example["answers"]
+                total.append(tmp)
+
+            cqas = pd.DataFrame(total)
+            return cqas
+    
+    # query, passage embedding 수행하여 변수에 저장
+    def get_dense_embedding(self, dataset):
+
+        args = self.args
+        p_encoder = self.p_encoder
+        q_encoder = self.q_encoder
+        tokenizer = self.tokenizer
+        BATCHSIZE = 32
+
+        if self.mode=='inference':
+            passages, questions = dataset[0],dataset[1]
+
+            passages_list=[]
+            for idx, p in enumerate(passages):
+                passages[str(idx)]['text']
+                passages_list.append(passages[str(idx)]['text'])
+
+            print('[passages num]:',len(passages_list))
+
+            p_seqs = tokenizer(passages_list, padding="max_length", truncation=True, return_tensors='pt')
+
+            passage_dataset = TensorDataset(
+                p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
+            )
+
+            self.passage_dataloader = DataLoader(passage_dataset, batch_size=BATCHSIZE)
+            
+            with torch.no_grad():
+                p_encoder.eval()
+                p_embs=[]
+
+                with tqdm(self.passage_dataloader , unit="batch") as tepoch:
+                    for idx, batch in enumerate(tepoch):
+
+                        p_inputs = {
+                            'input_ids': batch[0].to(args.device),
+                            'attention_mask': batch[1].to(args.device),
+                            'token_type_ids': batch[2].to(args.device)
+                        }
+                
+                        p_outputs = self.p_encoder(**p_inputs) # (batch_size*(num_neg+1), emb_dim)
+                        p_embs.append(p_outputs)
+
+            self.p_embs= torch.concat(p_embs, dim=0)
+            self.contexts = passages_list
+
+        else:
+            # 2. (Question, Passage) 데이터셋 만들어주기
+            q_seqs = tokenizer(dataset['question'], padding="max_length", truncation=True, return_tensors='pt')
+            p_seqs = tokenizer(dataset['context'], padding="max_length", truncation=True, return_tensors='pt')
+
+            print(q_seqs['input_ids'].shape,p_seqs['input_ids'].shape)
+
+            train_dataset = TensorDataset(
+                p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
+                q_seqs['input_ids'], q_seqs['attention_mask'], q_seqs['token_type_ids']
+            )
+
+            passage_dataset = TensorDataset(
+                p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
+            )
+
+            self.passage_dataloader = DataLoader(passage_dataset, batch_size=BATCHSIZE)
+
+            dataloader = DataLoader(train_dataset, batch_size=BATCHSIZE)
+
+            with torch.no_grad():
+                p_encoder.eval()
+                q_encoder.eval()
+                p_embs,q_embs=[],[]
+
+                with tqdm(dataloader , unit="batch") as tepoch:
+                    for idx, batch in enumerate(tepoch):
+
+                        p_inputs = {
+                            'input_ids': batch[0].to(args.device),
+                            'attention_mask': batch[1].to(args.device),
+                            'token_type_ids': batch[2].to(args.device)
+                        }
+                
+                        q_inputs = {
+                            'input_ids': batch[3].to(args.device),
+                            'attention_mask': batch[4].to(args.device),
+                            'token_type_ids': batch[5].to(args.device)
+                        }
+                
+                        p_outputs = self.p_encoder(**p_inputs) # (batch_size*(num_neg+1), emb_dim)
+                        p_embs.append(p_outputs)
+                        q_outputs = self.q_encoder(**q_inputs) # (batch_size*, emb_dim)
+                        q_embs.append(q_outputs)
+
+            self.q_embs= torch.concat(q_embs, dim=0)
+            self.p_embs= torch.concat(p_embs, dim=0)
+
+    def compute_topk(self):
+        dataset_len = self.q_embs.size(0)
+        top1,top20,top100=0,0,0
+
+        # 쿼리 하나씩 받아오면서 계산하기 
+        for idx in range(dataset_len):
+
+            q_emb = self.q_embs[idx,:]
+            
+            dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embs, 0, 1))
+            rank = torch.argsort(dot_prod_scores, dim=0, descending=True).squeeze()
+
+            if idx in rank[:100]:
+                top100+=1
+            if idx in rank[:20]:
+                top20+=1
+            if idx == rank[0]:
+                top1+=1
+
+        top1_acc=top1/dataset_len
+        top20_acc=top20/dataset_len
+        top100_acc=top100/dataset_len
+
+        print('[Top-1 acc]',top1_acc,' | ','[Top-20 acc]',top20_acc,' | ','[Top-100 acc]', top100_acc)
 
     def split_space(self, sent):
         return sent.split(" ")
 
-    def BM25(self, query):
-
-        corpus = np.array(list(set([example for example in self.dataset['context']])))
-
-        tokenized_corpus = [self.split_space(doc) for doc in corpus]
-        self.bm25 = BM25Okapi(tokenized_corpus)
+    def BM25(self, query, corpus):
 
         tokenized_query = self.split_space(query)
-
         doc_scores = self.bm25.get_scores(tokenized_query)
-
         top_n_passages = self.bm25.get_top_n(tokenized_query, corpus, n=10)
         
         return top_n_passages
 
-    def prepare_in_batch_negative(self, dataset=None, num_neg=2, tokenizer=None):
+    def prepare_in_batch_negative(self, dataset=None, tokenizer=None):
 
-        if dataset is None:
-            dataset = self.dataset
-
-        if tokenizer is None:
-            tokenizer = self.tokenizer
+        dataset = self.dataset
+        tokenizer = self.tokenizer
 
         # 1. In-Batch-Negative 만들기
         # CORPUS를 np.array로 변환해줍니다.        
         corpus = np.array(list(set([example for example in dataset['context']])))
 
-        tokenized_corpus = [tokenizer(doc) for doc in corpus]
-        self.bm25 = BM25Okapi(tokenized_corpus)
+        # tokenized_corpus = [tokenizer(doc) for doc in corpus]
+        # self.bm25 = BM25Okapi(tokenized_corpus)
 
         p_with_neg = []
+        
+        if self.bm25:
+            num=self.num_neg+1+self.additional_args.bm_num
+        else:
+            num=self.num_neg+1
 
-        for c in dataset['context']:
+        print("prepare_in_batch_negative")
+        with tqdm(dataset['context'], unit="batch") as tepoch:
+            for idx, c in enumerate(tepoch):
             
-            while True:
-                neg_idxs = np.random.randint(len(corpus), size=num_neg)
+                while True:
+                    neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
 
-                if not c in corpus[neg_idxs]:
-                    p_neg = corpus[neg_idxs]
+                    if not c in corpus[neg_idxs]:
+                        p_neg = corpus[neg_idxs]
 
-                    p_with_neg.append(c)
-                    p_with_neg.extend(p_neg)
-                    break
+                        p_with_neg.append(c)
+                        p_with_neg.extend(p_neg)
+                        
+
+                        # BM25로 질문과 유사도 높은 지문 negative sample로 추가 (--bm_num으로 몇개 추가할건지 설정가능)
+                        if self.bm25:
+                            cnt=0
+                            top_n_passages=self.BM25(dataset['question'][idx], corpus)
+                            
+                            for p in top_n_passages:
+                                if p!=c:
+                                    p_with_neg.append(p)
+                                    cnt+=1
+                                if cnt==self.additional_args.bm_num:
+                                    break
+
+                            # BM25로 질문과 유사도 높은 지문 negative sample로 추가 (성능 별로 좋지 않았음, 전처리 오래 걸림!)
+                            # top_n_passages=self.BM25(dataset['context'][idx], corpus)
+                            
+                            # for p in top_n_passages:
+                            #     if p!=c:
+                            #         p_with_neg.append(p)
+                            #         break
+                        break
                     
 
         # 2. (Question, Passage) 데이터셋 만들어주기
@@ -111,9 +316,9 @@ class DenseRetrieval:
         p_seqs = tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors='pt')
 
         max_len = p_seqs['input_ids'].size(-1)
-        p_seqs['input_ids'] = p_seqs['input_ids'].view(-1, num_neg+1, max_len)
-        p_seqs['attention_mask'] = p_seqs['attention_mask'].view(-1, num_neg+1, max_len)
-        p_seqs['token_type_ids'] = p_seqs['token_type_ids'].view(-1, num_neg+1, max_len)
+        p_seqs['input_ids'] = p_seqs['input_ids'].view(-1, num, max_len)
+        p_seqs['attention_mask'] = p_seqs['attention_mask'].view(-1, num, max_len)
+        p_seqs['token_type_ids'] = p_seqs['token_type_ids'].view(-1, num, max_len)
 
         train_dataset = TensorDataset(
             p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
@@ -121,13 +326,6 @@ class DenseRetrieval:
         )
 
         self.train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=self.args.per_device_train_batch_size)
-
-        valid_seqs = tokenizer(dataset['context'], padding="max_length", truncation=True, return_tensors='pt')
-        passage_dataset = TensorDataset(
-            valid_seqs['input_ids'], valid_seqs['attention_mask'], valid_seqs['token_type_ids']
-        )
-
-        self.passage_dataloader = DataLoader(passage_dataset, batch_size=self.args.per_device_train_batch_size)
 
 
     def train(self, args=None):
@@ -158,6 +356,11 @@ class DenseRetrieval:
 
         train_iterator = tqdm(range(int(args.num_train_epochs)), desc="Epoch")
 
+        if self.bm25:
+            num=self.num_neg+1+self.additional_args.bm_num
+        else:
+            num=self.num_neg+1
+
         for _ in train_iterator:
 
             with tqdm(self.train_dataloader, unit="batch") as tepoch:
@@ -170,9 +373,9 @@ class DenseRetrieval:
                     targets = targets.to(args.device)
 
                     p_inputs = {
-                        'input_ids': batch[0].view(batch_size * (self.num_neg + 1), -1).to(args.device),
-                        'attention_mask': batch[1].view(batch_size * (self.num_neg + 1), -1).to(args.device),
-                        'token_type_ids': batch[2].view(batch_size * (self.num_neg + 1), -1).to(args.device)
+                        'input_ids': batch[0].view(batch_size * (num), -1).to(args.device),
+                        'attention_mask': batch[1].view(batch_size * (num), -1).to(args.device),
+                        'token_type_ids': batch[2].view(batch_size * (num), -1).to(args.device)
                     }
             
                     q_inputs = {
@@ -185,10 +388,9 @@ class DenseRetrieval:
                     q_outputs = self.q_encoder(**q_inputs)  # (batch_size*, emb_dim)
 
                     # Calculate similarity score & loss
-                    p_outputs = p_outputs.view(batch_size, self.num_neg + 1, -1)
+                    p_outputs = p_outputs.view(batch_size, num, -1)
      
                     q_outputs = q_outputs.view(batch_size, 1, -1)
-            
 
                     sim_scores = torch.bmm(q_outputs, torch.transpose(p_outputs, 1, 2)).squeeze()  #(batch_size, num_neg + 1)
                     sim_scores = sim_scores.view(batch_size, -1)
@@ -223,43 +425,56 @@ class DenseRetrieval:
 
                     del p_inputs, q_inputs
 
+    def get_relevant_doc(self, query: str, k: Optional[int] = 1) -> Tuple[List, List]:
 
-    def get_relevant_doc(self, query, k=1, args=None, p_encoder=None, q_encoder=None):
-
-        if args is None:
-            args = self.args
-
-        if p_encoder is None:
-            p_encoder = self.p_encoder
-
-        if q_encoder is None:
-            q_encoder = self.q_encoder
+        args = self.args
+        p_encoder = self.p_encoder
+        q_encoder = self.q_encoder
 
         with torch.no_grad():
             p_encoder.eval()
             q_encoder.eval()
 
             q_seqs_val = self.tokenizer([query], padding="max_length", truncation=True, return_tensors='pt').to(args.device)
-            q_emb = q_encoder(**q_seqs_val).to('cpu')  # (num_query=1, emb_dim)
+            q_emb = q_encoder(**q_seqs_val).to('cpu')  
 
-            p_embs = []
-            for batch in self.passage_dataloader:
+        p_embs = torch.tensor(self.p_embs, device='cpu').squeeze()
+        dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1)).squeeze()
+        rank = torch.argsort(dot_prod_scores, descending=True) 
 
-                batch = tuple(t.to(args.device) for t in batch)
-                p_inputs = {
-                    'input_ids': batch[0],
-                    'attention_mask': batch[1],
-                    'token_type_ids': batch[2]
-                }
-                p_emb = p_encoder(**p_inputs).to('cpu')
-                p_embs.append(p_emb)
+        doc_score = dot_prod_scores[rank].tolist()[:k]
+        doc_indices = rank.tolist()[:k]
 
-        p_embs = torch.stack(p_embs, dim=0).view(len(self.passage_dataloader.dataset), -1)  # (num_passage, emb_dim)
+        return doc_score, doc_indices
 
-        dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
-        rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
-        return rank[:k]
+    def get_relevant_doc_bulk(
+        self, queries: List, k: Optional[int] = 1
+    ) -> Tuple[List, List]:
 
+        args = self.args
+        p_encoder = self.p_encoder
+        q_encoder = self.q_encoder
+
+        with torch.no_grad():
+            p_encoder.eval()
+            q_encoder.eval()
+
+            q_seqs_val = self.tokenizer(queries, padding="max_length", truncation=True, return_tensors='pt').to(args.device)
+            q_embs = q_encoder(**q_seqs_val).to('cpu')  
+
+        p_embs = torch.tensor(self.p_embs, device='cpu').squeeze()
+        dot_prod_scores = torch.matmul(q_embs, torch.transpose(p_embs, 0, 1)).squeeze()
+
+        rank = torch.argsort(dot_prod_scores, descending=True) 
+
+        tensor_stack=[]
+        for i in range(dot_prod_scores.size(0)):
+            tensor_stack.append(dot_prod_scores[i,rank[i,:k]])
+
+        doc_scores=torch.stack(tensor_stack, dim=0).tolist()
+        doc_indices = rank[:,:k].tolist()
+        
+        return doc_scores, doc_indices
   
 class BertEncoder(BertPreTrainedModel):
 
@@ -268,7 +483,6 @@ class BertEncoder(BertPreTrainedModel):
 
         self.bert = BertModel(config)
         self.init_weights()
-      
       
     def forward(
             self,
@@ -287,16 +501,23 @@ class BertEncoder(BertPreTrainedModel):
         return pooled_output
 
 def main(args):
+
+    # arguments.py 참고 (--epochs --batch_size --num_neg --save_dir --report_name --project_name --wandb --test_query --bm25 --bm_num --dataset --topk)
+    # [example] python dense_retrieval.py --report_name HY-BERT_baseline_wiki_BM25_ex3 --bm25 True --num_neg 4 --bm_num 2 --dataset wiki --wandb True
     
     if args.wandb=='True':
         wandb.init(project=args.project_name, entity="salt-bread", name=args.report_name)
+    
+    print(args)
 
     # 대회 데이터셋 불러오기
-    dataset_train = load_from_disk("../data/train_dataset/")
-    train_dataset = dataset_train['train']
+    if args.dataset=='wiki':
+        dataset_train = load_from_disk("../data/train_dataset/")
+        train_dataset = dataset_train['train']
 
     # korQuad 불러오기
-    # train_dataset = load_dataset("squad_kor_v1")['train']
+    if args.dataset=='squad_kor_v1':
+        train_dataset = load_dataset("squad_kor_v1")['train']
 
     train_args = TrainingArguments(
         output_dir= args.save_dir,
@@ -315,50 +536,50 @@ def main(args):
     p_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
     q_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
 
-    retriever = DenseRetrieval(args=[train_args,args], dataset=train_dataset, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
+    retriever = DenseRetrieval(args=[train_args, args], dataset=train_dataset, bm25=args.bm25 ,num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
     retriever.train()
 
     if args.test_query=='True':
     
         model_checkpoint = 'klue/bert-base'
         tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-        # p_encoder-squad_kor_v1_batch2
-        p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-squad_kor_v1_batch2").to(train_args.device)
-        q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-squad_kor_v1_batch2").to(train_args.device)
+        p_encoder = BertEncoder.from_pretrained(os.path.join(args.save_dir, f"p_encoder-{args.report_name}")).to(train_args.device)
+        q_encoder = BertEncoder.from_pretrained(os.path.join(args.save_dir, f"q_encoder-{args.report_name}")).to(train_args.device)
 
-        # Retriever는 아래와 같이 사용할 수 있도록 코드를 짜봅시다.
-        dataset_val = load_from_disk("../data/train_dataset/")
-        dataset_val = dataset_val['train']
-        retriever = DenseRetrieval(args=[train_args,args], dataset=dataset_val, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
+        # squad_kor_v1 데이터셋
+        # dataset = load_dataset("squad_kor_v1")['train']
 
-        index = 200
-        # query = '모든 악티늄족의 공통적인 자기적 성질은?' 
-        query = dataset_val[index]['question']
-        passage = dataset_val[index]['context']
-        results = retriever.get_relevant_doc(query=query, k=args.topk)
+        # 대회 validation set
+        dataset = load_from_disk("../data/train_dataset/")
+        dataset = dataset['validation']
 
-        print(f"[Search Query] {query}\n")
-        print(f"[Passage] {passage}\n")
+        retriever = DenseRetrieval(args=[train_args, args], dataset=dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder,mode='test')
 
-        indices = results.tolist()
-        for i, idx in enumerate(indices):
-            print(f"Top-{i + 1}th Passage (Index {idx})")
+        # # 단일 쿼리 테스트 (str)
+        index = 0
+        doc_scores, doc_indices = retriever.get_relevant_doc(query=dataset[index]['question'] ,k=args.topk)
+
+        print(f"[Search Query] {dataset[index]['question']}\n")
+        print(f"[Passage] {dataset[index]['context']}\n")
+
+        for i, idx in enumerate(doc_indices):
+            print(f"Top-{i + 1}th Passage (Score {doc_scores[i]})")
             pprint(retriever.dataset['context'][idx])
 
+        # # 다중 쿼리 테스트 (List)
+        # doc_scores, doc_indices = retriever.get_relevant_doc_bulk(queries=[dataset[index]['question'],dataset[index+1]['question'],dataset[index+2]['question']] ,k=args.topk)
+
+        # for i in range(len(doc_indices)):
+        #     for j, idx in enumerate(doc_indices[i]):
+        #         pprint(retriever.dataset['question'][idx])
+        #         print(f"Top-{j + 1}th Passage (Score {doc_scores[i][j]})")
+        #         pprint(retriever.dataset['context'][idx])
+        #     print("---------------------------------------------------------------------")
 
 if __name__ == '__main__':
-    # wandb.login()
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=2)
-    parser.add_argument('--topk', type=int, default=10)
-    parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--num_neg', type=int, default=3)
-    parser.add_argument('--save_dir', type=str, default="./dense_retrieval")
-    parser.add_argument('--report_name', type=str)
-    parser.add_argument('--project_name', type=str, default="MRC_retrieval")
-    parser.add_argument('--wandb', type=str, default="True")
-    parser.add_argument('--test_query', type=str, default="True")
-    
-    args = parser.parse_args()
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments)
+    )
+    args, _ = parser.parse_args_into_dataclasses()
     main(args)
+    

@@ -26,7 +26,79 @@ class ModelArguments:
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
     )
-
+    # 여기서부터 dense_retrieval.py에서 사용되는 arguments들
+    epochs: Optional[int] = field(
+        default=2,
+        metadata={
+            "help": "epoch setting"
+        },
+    )
+    batch_size: Optional[int] = field(
+        default=4,
+        metadata={
+            "help": "batch size setting"
+        },
+    )
+    num_neg: Optional[int] = field(
+        default=2,
+        metadata={
+            "help": "Set how many negative samples to train"
+        },
+    )
+    save_dir: Optional[str] = field(
+        default="./dense_retrieval",
+        metadata={
+            "help": "Set in which folder to save encoders"
+        },
+    )
+    report_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "set wandb report name!"
+        },
+    )
+    project_name: Optional[str] = field(
+        default="MRC_retrieval",
+        metadata={
+            "help": "set wandb project name!"
+        },
+    )
+    wandb: Optional[str] = field(
+        default="False",
+        metadata={
+            "help": "Whether to use wandb"
+        },
+    )
+    test_query: Optional[str] = field(
+        default="True",
+        metadata={
+            "help": "whether to test single query/queries after train"
+        },
+    )
+    bm25: Optional[str] = field(
+        default="False",
+        metadata={
+            "help": "Whether to use bm25"
+        },
+    )
+    bm_num: Optional[int] = field(
+        default=1,
+        metadata={
+            "help": "Set how many bm_samples(hard negative) to train"
+        },
+    )
+    dataset: Optional[str] = field(
+        default="wiki",
+        metadata={
+            "help": "dataset : wiki? squad_kor_v1?"
+        },
+    )
+    topk: Optional[int] = field(
+        default=10,
+        metadata={
+            "help": "set topk"
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:

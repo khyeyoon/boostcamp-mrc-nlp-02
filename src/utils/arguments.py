@@ -99,6 +99,12 @@ class ModelArguments:
             "help": "set topk"
         },
     )
+    retrieval: Optional[str] = field(
+        default='sparse',
+        metadata={
+            "help": "retrieval : DPR,sparse,dual"
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:

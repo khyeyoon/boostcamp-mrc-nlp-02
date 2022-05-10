@@ -4,3 +4,6 @@
 *__pycache__
 *.sh
 /models/
+nohup*
+*.pickle
+.gitignore

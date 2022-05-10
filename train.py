@@ -1,13 +1,11 @@
+import logging
 import os
 import sys
-import logging
 from typing import NoReturn
-from datasets import load_from_disk, load_dataset
 
+from arguments import DataTrainingArguments, ModelArguments
 from datasets import DatasetDict, load_from_disk, load_metric
-from utils.utils_qa import check_no_error, postprocess_qa_predictions
-from utils.arguments import DataTrainingArguments, ModelArguments
-from utils.trainer_qa import QuestionAnsweringTrainer
+from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -18,6 +16,8 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from datasets import load_dataset
+from utils_qa import check_no_error, postprocess_qa_predictions
 
 logger = logging.getLogger(__name__)
 
@@ -30,33 +30,19 @@ def main():
         (ModelArguments, DataTrainingArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    # epochs 수정
+    training_args.num_train_epochs = 5
+    training_args.logging_steps=100
+
+    print(training_args)
     print(model_args.model_name_or_path)
 
     # [참고] argument를 manual하게 수정하고 싶은 경우에 아래와 같은 방식을 사용할 수 있습니다
-    # training_args.per_device_train_batch_size = 4
-    # print(training_args.per_device_train_batch_size)
+    training_args.per_device_train_batch_size = 32
+    print(training_args.per_device_train_batch_size)
 
     print(f"model is from {model_args.model_name_or_path}")
     print(f"data is from {data_args.dataset_name}")
-
-    datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
-
-
-    # dict_data=DatasetDict()
-
-    # # 데이터 늘려서 학습
-    # KorQuAD_dataset = load_dataset("squad_kor_v1")['train']
-    # # # print(KorQuAD_dataset)
-    # dict_data['context']=datasets['train']['context']+KorQuAD_dataset['context'][:1000]
-    # dict_data['question']=datasets['train']['question']+KorQuAD_dataset['question'][:1000]
-    # dict_data['title']=datasets['train']['title']+KorQuAD_dataset['title'][:1000]
-    # dict_data['answers']=datasets['train']['answers']+KorQuAD_dataset['answers'][:1000]
-    # dict_data['id']=datasets['train']['id']+KorQuAD_dataset['id'][:1000]
-    # # print("데이터셋 개수",len(dict_data['context']))
-    # datasets['train']=Dataset(dict_data)
-
-    print(datasets)
 
     # logging 설정
     logging.basicConfig(
@@ -71,6 +57,9 @@ def main():
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
 
+    datasets = load_from_disk(data_args.dataset_name)
+    # datasets = load_dataset("squad_kor_v1")
+    print(datasets)
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
@@ -88,9 +77,12 @@ def main():
         # rust version이 비교적 속도가 빠릅니다.
         use_fast=True,
     )
+
+    # 모델 바꾸려면 여기 수정
     model = AutoModelForQuestionAnswering.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        './models/train_KorQuAD',
+        # model_args.model_name_or_path,
+        # from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
     )
 
@@ -148,7 +140,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=True, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -217,7 +209,8 @@ def run_mrc(
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"]
+
+        train_dataset = datasets['train']
 
         # dataset에서 train feature를 생성합니다.
         train_dataset = train_dataset.map(
@@ -240,10 +233,11 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=True, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
-
+        print(tokenized_examples.keys())
+        print(len(tokenized_examples['input_ids']))
         # 길이가 긴 context가 등장할 경우 truncate를 진행해야하므로, 해당 데이터셋을 찾을 수 있도록 mapping 가능한 값이 필요합니다.
         sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
 
@@ -313,17 +307,11 @@ def run_mrc(
             )
 
     metric = load_metric("squad")
-    print(metric)
+    print('metric 출력',metric)
 
     def compute_metrics(p: EvalPrediction):
-        result = metric.compute(predictions=p.predictions, references=p.label_ids)
-        result['eval_exact_match'] = result["exact_match"]
-        result['eval_f1'] = result['f1']
-        # result['eval_loss'] = result['loss']
-        # print('result',result)
-        return result
+        return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    # print("model:",model)
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
         model=model,
@@ -336,7 +324,7 @@ def run_mrc(
         post_process_function=post_processing_function,
         compute_metrics=compute_metrics,
     )
-    print(trainer)
+
     # Training
     if training_args.do_train:
         if last_checkpoint is not None:

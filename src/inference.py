@@ -3,13 +3,17 @@ Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 
 대부분의 로직은 train.py 와 비슷하나 retrieval, predict 부분이 추가되어 있습니다.
 """
-
-
 import logging
 import sys
 from typing import Callable, Dict, List, NoReturn, Tuple
+import torch
+import os
+import json
+import argparse
+import pandas as pd
 
 import numpy as np
+import pickle
 from utils.arguments import DataTrainingArguments, ModelArguments
 from datasets import (
     Dataset,
@@ -33,6 +37,12 @@ from transformers import (
     set_seed,
 )
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
+from dense_retrieval import DenseRetrieval,BertEncoder
+
+
+import pickle
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +55,7 @@ def main():
         (ModelArguments, DataTrainingArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    print(model_args)
 
     training_args.do_train = True
 
@@ -65,7 +76,6 @@ def main():
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
@@ -86,23 +96,78 @@ def main():
         config=config,
     )
 
-    # True일 경우 : run passage retrieval
+    # 여기서 retrieval 설정
     if data_args.eval_retrieval:
-        datasets = run_sparse_retrieval(
-            tokenizer.tokenize, datasets, training_args, data_args,
-        )
+
+        if model_args.retrieval=='sparse':
+            # sparse retrieval 사용
+            print("retrieval : sparse")
+            datasets = run_sparse_retrieval(
+                tokenizer.tokenize, datasets, training_args, data_args,)
+
+        elif model_args.retrieval=='DPR':
+            print("retrieval : DPR")
+            datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
+
+        else:
+            # 둘 다 이용하기
+            print("retrieval : dual")
+            sparse_datasets = run_sparse_retrieval(
+                tokenizer.tokenize, datasets, training_args, data_args,)
+            dense_datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
+            datasets=concat_retrieval(dense_datasets,sparse_datasets)
+
+        # 데이터셋 pickle 파일 저장하기
+        with open('retrieval.pickle','wb') as fw:
+            pickle.dump(datasets, fw)
+
+        # with open('retrieval.pickle', 'rb') as fr:
+        #     datasets = pickle.load(fr)
+
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
+def remove_overlap(text):
+    text_arr=list(set(text.split('\n'+"="*150+'\n')))
+    return (' @단락 끝@ @단락 시작@ ').join(text_arr)
+
+def concat_retrieval(sparse_retrieval,dense_retrieval):
+    total=[]
+    for index in range(len(sparse_retrieval['validation'])):
+        tmp={}
+        doc_id=dense_retrieval['validation'][index]['id']
+        contexts=sparse_retrieval['validation'][index]['context']+dense_retrieval['validation'][index]['context']
+        question=dense_retrieval['validation'][index]['question']
+        contexts=remove_overlap(contexts)
+        tmp['id']=doc_id
+        tmp['context']=contexts
+        tmp['question']=question
+        total.append(tmp)
+
+    cqas = pd.DataFrame(total)
+
+    f = Features(
+        {
+            "context": Value(dtype="string", id=None),
+            "id": Value(dtype="string", id=None),
+            "question": Value(dtype="string", id=None),
+        })
+
+    datasets = DatasetDict({"validation": Dataset.from_pandas(cqas, features=f)})
+    return datasets
 
 def run_sparse_retrieval(
     tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
+<<<<<<< HEAD
     data_path: str = "../../data",
+=======
+    data_path: str = "/opt/ml/input/data/",
+>>>>>>> 32cfaaec7098e0e97838729fc8f4451de7a8db32
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
 
@@ -119,6 +184,7 @@ def run_sparse_retrieval(
         )
     else:
         df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
+        
 
     # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
     if training_args.do_predict:
@@ -147,7 +213,77 @@ def run_sparse_retrieval(
                 "question": Value(dtype="string", id=None),
             }
         )
+
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+
+    return datasets
+
+def run_dense_retrieval(
+    data_args: DataTrainingArguments,
+    training_args: TrainingArguments,
+    model_args: ModelArguments,
+    data_path: str = "../data",
+    context_path: str = "wikipedia_documents.json",
+) -> DatasetDict:
+
+    # print(training_args,'\n',data_args)
+    model_checkpoint = model_args.model_name_or_path
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+    p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-HY-batch_accumulation_16_bm_1").to(device)
+    q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-HY-batch_accumulation_16_bm_1").to(device)
+
+    with open(os.path.join(data_path,context_path), "r", encoding='utf-8') as f:
+        wiki = json.load(f)
+
+    # 대회 validation set
+    dataset = load_from_disk(os.path.join(data_path,"test_dataset"))
+
+    train_args = TrainingArguments(
+        output_dir= model_args.save_dir,
+        evaluation_strategy="epoch",
+        learning_rate=2e-5,
+        per_device_train_batch_size=model_args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
+        per_device_eval_batch_size=model_args.batch_size,
+        num_train_epochs=model_args.epochs,
+        weight_decay=0.01,
+    )
+
+    retriever = DenseRetrieval(args = [train_args,model_args], dataset=[wiki, dataset['validation']], tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder, mode='inference')
+    
+    df = retriever.retrieve(dataset["validation"], topk=data_args.top_k_retrieval)
+
+    # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
+    if training_args.do_predict:
+        f = Features(
+            {
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+
+    # train data 에 대해선 정답이 존재하므로 id question context answer 로 데이터셋이 구성됩니다.
+    elif training_args.do_eval:
+        f = Features(
+            {
+                "answers": Sequence(
+                    feature={
+                        "text": Value(dtype="string", id=None),
+                        "answer_start": Value(dtype="int32", id=None),
+                    },
+                    length=-1,
+                    id=None,
+                ),
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+
+    # validation
+    datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+
     return datasets
 
 
@@ -188,7 +324,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 

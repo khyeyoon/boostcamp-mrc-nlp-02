@@ -99,6 +99,12 @@ class ModelArguments:
             "help": "set topk"
         },
     )
+    retrieval: Optional[str] = field(
+        default='sparse',
+        metadata={
+            "help": "retrieval : DPR,sparse,dual"
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:
@@ -140,7 +146,7 @@ class DataTrainingArguments:
         },
     )
     max_answer_length: int = field(
-        default=100,    # 30, max_length in train == 83 in valid == 64
+        default=30,    # 30, max_length in train == 83 in valid == 64
         metadata={
             "help": "The maximum length of an answer that can be generated. This is needed because the start "
             "and end predictions are not conditioned on one another."
@@ -160,5 +166,5 @@ class DataTrainingArguments:
         },
     )
     use_faiss: bool = field( # False
-        default=True, metadata={"help": "Whether to build with faiss"}
+        default=False, metadata={"help": "Whether to build with faiss"}
     )

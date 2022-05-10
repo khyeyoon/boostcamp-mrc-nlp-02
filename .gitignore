@@ -11,3 +11,7 @@ output/
 elasticsearch-5.4.3
 elasticsearch-5.4.3.tar.gz
 .ipynb_checkpoints/
+
+/models/
+nohup*
+*.pickle

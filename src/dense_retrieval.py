@@ -18,7 +18,7 @@ from datasets import (
     Dataset,
     DatasetDict,
 )
-from arguments import DataTrainingArguments, ModelArguments
+from utils.arguments import DataTrainingArguments, ModelArguments
 from contextlib import contextmanager
 from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer

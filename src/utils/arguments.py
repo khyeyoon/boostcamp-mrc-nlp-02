@@ -100,9 +100,9 @@ class ModelArguments:
         },
     )
     retrieval: Optional[str] = field(
-        default='sparse',
+        default='tfidf',
         metadata={
-            "help": "retrieval : DPR,sparse,dual"
+            "help": "retrieval : tfidf, DPR, BM25 ,dual"
         },
     )
 

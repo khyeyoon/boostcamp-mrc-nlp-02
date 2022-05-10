@@ -13,7 +13,7 @@ import argparse
 import pandas as pd
 
 import numpy as np
-from arguments import DataTrainingArguments, ModelArguments
+from utils.arguments import DataTrainingArguments, ModelArguments
 from datasets import (
     Dataset,
     DatasetDict,
@@ -24,7 +24,7 @@ from datasets import (
     load_metric,
 )
 from retrieval import SparseRetrieval
-from trainer_qa import QuestionAnsweringTrainer
+from utils.trainer_qa import QuestionAnsweringTrainer
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -35,16 +35,12 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from utils_qa import check_no_error, postprocess_qa_predictions
+from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from dense_retrieval import DenseRetrieval,BertEncoder
-
 
 import pickle
 
-
-
 logger = logging.getLogger(__name__)
-
 
 def main():
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
@@ -98,27 +94,33 @@ def main():
     # 여기서 retrieval 설정
     if data_args.eval_retrieval:
 
-        if model_args.retrieval=='sparse':
-            # sparse retrieval 사용
-            print("retrieval : sparse")
+        # pickle 파일 불러와서 사용할거면 if문 전체 주석처리!!
+        if model_args.retrieval=='tfidf':
             datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args,)
+                tokenizer.tokenize, datasets, training_args, data_args,retrieval='tfidf',data_path=data_args.dataset_name)
 
         elif model_args.retrieval=='DPR':
-            print("retrieval : DPR")
-            datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
+            datasets = run_dense_retrieval(training_args=training_args,data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
 
+        elif model_args.retrieval=='BM25':
+            datasets = run_sparse_retrieval(
+                tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
         else:
             # 둘 다 이용하기
-            print("retrieval : dual")
+            print("retrieval : BM25 + DPR")
             sparse_datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args,)
-            dense_datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
+                tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
+            dense_datasets = run_dense_retrieval(training_args=training_args,data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
+
             datasets=concat_retrieval(dense_datasets,sparse_datasets)
 
         # 데이터셋 pickle 파일 저장하기
         with open('retrieval.pickle','wb') as fw:
             pickle.dump(datasets, fw)
+
+        # pickle 파일 불러와서 사용할 때 주석 풀기!
+        # with open('retrieval_test.pickle', 'rb') as fr:
+        #     datasets = pickle.load(fr)
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
@@ -160,52 +162,60 @@ def run_sparse_retrieval(
     data_args: DataTrainingArguments,
     data_path: str = "../data",
     context_path: str = "wikipedia_documents.json",
+    retrieval: str = "tfidf",
 ) -> DatasetDict:
-
+    
     # Query에 맞는 Passage들을 Retrieval 합니다.
     retriever = SparseRetrieval(
         tokenize_fn=tokenize_fn, data_path=data_path, context_path=context_path
     )
-    retriever.get_sparse_embedding()
 
-    if data_args.use_faiss:
-        retriever.build_faiss(num_clusters=data_args.num_clusters)
-        df = retriever.retrieve_faiss(
-            datasets["validation"], topk=data_args.top_k_retrieval
-        )
+    if retrieval=='tfidf':
+        print("retrieval : tfidf")
+        retriever.get_sparse_embedding()
+
+        if data_args.use_faiss:
+            retriever.build_faiss(num_clusters=data_args.num_clusters)
+            df = retriever.retrieve_faiss(
+                datasets["validation"], topk=data_args.top_k_retrieval
+            )
+        else:
+            df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
+
+        # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
+        if training_args.do_predict:
+            f = Features(
+                {
+                    "context": Value(dtype="string", id=None),
+                    "id": Value(dtype="string", id=None),
+                    "question": Value(dtype="string", id=None),
+                }
+            )
+
+        # train data 에 대해선 정답이 존재하므로 id question context answer 로 데이터셋이 구성됩니다.
+        elif training_args.do_eval:
+            f = Features(
+                {
+                    "answers": Sequence(
+                        feature={
+                            "text": Value(dtype="string", id=None),
+                            "answer_start": Value(dtype="int32", id=None),
+                        },
+                        length=-1,
+                        id=None,
+                    ),
+                    "context": Value(dtype="string", id=None),
+                    "id": Value(dtype="string", id=None),
+                    "question": Value(dtype="string", id=None),
+                }
+            )
+
+        datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+        print("tfidf finished")
     else:
-        df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
-        
-
-    # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
-    if training_args.do_predict:
-        f = Features(
-            {
-                "context": Value(dtype="string", id=None),
-                "id": Value(dtype="string", id=None),
-                "question": Value(dtype="string", id=None),
-            }
-        )
-
-    # train data 에 대해선 정답이 존재하므로 id question context answer 로 데이터셋이 구성됩니다.
-    elif training_args.do_eval:
-        f = Features(
-            {
-                "answers": Sequence(
-                    feature={
-                        "text": Value(dtype="string", id=None),
-                        "answer_start": Value(dtype="int32", id=None),
-                    },
-                    length=-1,
-                    id=None,
-                ),
-                "context": Value(dtype="string", id=None),
-                "id": Value(dtype="string", id=None),
-                "question": Value(dtype="string", id=None),
-            }
-        )
-
-    datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+        print("retrieval : BM25")
+        datasets=retriever.BM25(datasets["validation"], topk=data_args.top_k_retrieval)
+        print("BM25 finished")
 
     return datasets
 
@@ -217,18 +227,18 @@ def run_dense_retrieval(
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
 
-    # print(training_args,'\n',data_args)
+    print("retrieval : DPR")
     model_checkpoint = model_args.model_name_or_path
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-    p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-HY-batch_accumulation_16_bm_1").to(device)
-    q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-HY-batch_accumulation_16_bm_1").to(device)
+    p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
+    q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
 
     with open(os.path.join(data_path,context_path), "r", encoding='utf-8') as f:
         wiki = json.load(f)
 
     # 대회 validation set
-    dataset = load_from_disk(os.path.join(data_path,"test_dataset"))
+    dataset = load_from_disk(os.path.join(data_path, "test_dataset"))
 
     train_args = TrainingArguments(
         output_dir= model_args.save_dir,
@@ -274,6 +284,7 @@ def run_dense_retrieval(
 
     # validation
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+    print("finished DPR")
 
     return datasets
 
@@ -286,6 +297,7 @@ def run_mrc(
     tokenizer,
     model,
 ) -> NoReturn:
+    print("reader로 데이터세트 전달하기 전 전처리 과정 시작!")
 
     # eval 혹은 prediction에서만 사용함
     column_names = datasets["validation"].column_names
@@ -315,7 +327,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 

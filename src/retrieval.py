@@ -11,6 +11,18 @@ import pandas as pd
 from datasets import Dataset, concatenate_datasets, load_from_disk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm.auto import tqdm
+import torch
+from transformers import AutoTokenizer
+from rank_bm25 import BM25Okapi
+from datasets import (
+    Dataset,
+    DatasetDict,
+    Features,
+    Sequence,
+    Value,
+    load_from_disk,
+    load_metric,
+)
 
 
 @contextmanager
@@ -26,6 +38,8 @@ class SparseRetrieval:
         tokenize_fn,
         data_path: Optional[str] = "../data/",
         context_path: Optional[str] = "wikipedia_documents.json",
+        mode:  Optional[str] = 'inference',
+        retrieval:  Optional[str] = 'tfidf',
     ) -> NoReturn:
 
         """
@@ -50,24 +64,112 @@ class SparseRetrieval:
         """
 
         self.data_path = data_path
-        with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
-            wiki = json.load(f)
-
-        self.contexts = list(
-            dict.fromkeys([v["text"] for v in wiki.values()])
-        )  # set 은 매번 순서가 바뀌므로
-        print(f"Lengths of unique contexts : {len(self.contexts)}")
-        self.ids = list(range(len(self.contexts)))
-
-        # Transform by vectorizer
-        self.tfidfv = TfidfVectorizer(
-            tokenizer=tokenize_fn, 
-            ngram_range=(1, 2), 
-            #max_features=50000,
-        )
-
         self.p_embedding = None  # get_sparse_embedding()로 생성합니다
         self.indexer = None  # build_faiss()로 생성합니다.
+        # Transform by vectorizer
+        self.tfidfv = TfidfVectorizer(
+            tokenizer=tokenize_fn, ngram_range=(1, 2), max_features=50000,
+        )
+        
+        print(data_path)
+        print(context_path)
+        if mode=='inference':
+            with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
+                wiki = json.load(f)
+            self.dataset = wiki
+            self.contexts = list(
+                dict.fromkeys([v["text"] for v in wiki.values()])
+            )  # set 은 매번 순서가 바뀌므로
+            print(f"Lengths of unique contexts : {len(self.contexts)}")
+
+            # self.BM25(self.dataset,topk=20)
+
+        if mode!='inference':
+
+            self.dataset = load_from_disk('../data/train_dataset')['validation']
+
+            self.contexts = list(
+                dict.fromkeys([v["context"] for v in self.dataset])
+            )  # set 은 매번 순서가 바뀌므로
+            print(f"Lengths of unique contexts : {len(self.contexts)}")
+            self.ids = list(range(len(self.contexts)))
+
+            # self.compute_topk()
+            self.BM25(self.dataset,topk=20)
+
+    def split_space(self, sent):
+        return sent.split(" ")
+
+
+    def BM25(self, query_set, topk=20):
+        # print(query_or_dataset)
+        # query_set = load_from_disk(data_path)['validation']
+        corpus = np.array(list(set([example for example in self.contexts])))
+        tokenized_corpus = [self.split_space(doc) for doc in corpus]
+        bm25 = BM25Okapi(tokenized_corpus)  
+        total=[]          
+        for idx, example in enumerate(
+            tqdm(query_set, desc="BM25 retrieval: ")
+        ):  
+            # print(query_or_dataset[idx])
+            tokenized_query = self.split_space(query_set[idx]['question'])
+            top_n_passages=bm25.get_top_n(tokenized_query, corpus, n=topk)
+            tmp = {
+                # Query와 해당 id를 반환합니다.
+                "question": query_set[idx]["question"],
+                "id": query_set[idx]["id"],
+                # Retrieve한 Passage의 id, context를 반환합니다.
+                "context": ('\n'+"="*150+'\n').join(top_n_passages
+                ),
+            }
+            total.append(tmp)
+
+        cqas = pd.DataFrame(total)
+
+        f = Features(
+            {
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+
+        datasets = DatasetDict({"validation": Dataset.from_pandas(cqas, features=f)})
+        with open('bm25_top'+str(topk)+'.pickle','wb') as fw:
+            pickle.dump(datasets, fw)
+        print("BM25 저장 완료")
+        return datasets
+
+    def compute_topk(self):
+
+        top1,top20,top100=0,0,0
+        dataset_len = len(self.dataset['question'])
+
+        # 쿼리 하나씩 받아오면서 계산하기 
+        for idx in range(dataset_len):
+
+            doc_scores, doc_indices = self.get_relevant_doc(self.dataset['question'][idx], k=100)
+
+            for i, indice in enumerate(doc_indices):
+                if idx==indice:
+                    if i==0:
+                        top1+=1
+                        top20+=1
+                        top100+=1
+                        break
+                    if i<20:
+                        top20+=1
+                        top100+=1
+                        break
+                    else:
+                        top100+=1
+                        break
+
+        top1_acc=top1/dataset_len
+        top20_acc=top20/dataset_len
+        top100_acc=top100/dataset_len
+
+        print('[Top-1 acc]',top1_acc,' | ','[Top-20 acc]',top20_acc,' | ','[Top-100 acc]', top100_acc)
 
     def get_sparse_embedding(self) -> NoReturn:
 
@@ -79,6 +181,9 @@ class SparseRetrieval:
         """
 
         # Pickle을 저장합니다.
+        # pickle_name = f"new_sparse_embedding.bin"
+        # tfidfv_name = f"new_tfidv.bin"
+
         pickle_name = f"sparse_embedding.bin"
         tfidfv_name = f"tfidv.bin"
         emd_path = os.path.join(self.data_path, pickle_name)
@@ -190,7 +295,7 @@ class SparseRetrieval:
                     "id": example["id"],
                     # Retrieve한 Passage의 id, context를 반환합니다.
                     "context_id": doc_indices[idx],
-                    "context": " ".join(
+                    "context": ('\n'+"="*150+'\n').join(
                         [self.contexts[pid] for pid in doc_indices[idx]]
                     ),
                 }
@@ -260,6 +365,8 @@ class SparseRetrieval:
             doc_scores.append(result[i, :][sorted_result].tolist()[:k])
             doc_indices.append(sorted_result.tolist()[:k])
         return doc_scores, doc_indices
+
+        
 
     def retrieve_faiss(
         self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
@@ -395,58 +502,65 @@ if __name__ == "__main__":
         type=str,
         help="",
     )
-    parser.add_argument("--data_path", metavar="./data", type=str, help="")
+    parser.add_argument("--data_path", default="../data", type=str, help="")
+    parser.add_argument("--mode", default="inference", type=str, help="")
     parser.add_argument(
-        "--context_path", metavar="wikipedia_documents", type=str, help=""
+        "--context_path", default="wikipedia_documents.json", type=str, help=""
     )
     parser.add_argument("--use_faiss", metavar=False, type=bool, help="")
 
     args = parser.parse_args()
+    print(args)
 
-    # Test sparse
-    org_dataset = load_from_disk(args.dataset_name)
-    full_ds = concatenate_datasets(
-        [
-            org_dataset["train"].flatten_indices(),
-            org_dataset["validation"].flatten_indices(),
-        ]
-    )  # train dev 를 합친 4192 개 질문에 대해 모두 테스트
-    print("*" * 40, "query dataset", "*" * 40)
-    print(full_ds)
+    if args.mode=='inference':
 
-    from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=False,)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=False,)
+        retriever = SparseRetrieval(
+            tokenize_fn=tokenizer.tokenize,
+            data_path=args.data_path,
+            context_path=args.context_path,
+            mode="inference",
+        )
 
-    retriever = SparseRetrieval(
-        tokenize_fn=tokenizer.tokenize,
-        data_path=args.data_path,
-        context_path=args.context_path,
-    )
-
-    query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
-
-    if args.use_faiss:
-
-        # test single query
-        with timer("single query by faiss"):
-            scores, indices = retriever.retrieve_faiss(query)
-
-        # test bulk
-        with timer("bulk query by exhaustive search"):
-            df = retriever.retrieve_faiss(full_ds)
-            df["correct"] = df["original_context"] == df["context"]
-
-            print("correct retrieval result by faiss", df["correct"].sum() / len(df))
-
+        retriever.get_sparse_embedding()
+        retriever.compute_topk()
+    
     else:
-        with timer("bulk query by exhaustive search"):
-            df = retriever.retrieve(full_ds)
-            df["correct"] = df["original_context"] == df["context"]
-            print(
-                "correct retrieval result by exhaustive search",
-                df["correct"].sum() / len(df),
-            )
+        # Test sparse
+        org_dataset = load_from_disk(args.dataset_name)
+        full_ds = concatenate_datasets(
+            [
+                org_dataset["train"].flatten_indices(),
+                org_dataset["validation"].flatten_indices(),
+            ]
+        )  # train dev 를 합친 4192 개 질문에 대해 모두 테스트
+        print("*" * 40, "query dataset", "*" * 40)
+        print(full_ds)
 
-        with timer("single query by exhaustive search"):
-            scores, indices = retriever.retrieve(query)
+        query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
+
+        if args.use_faiss:
+
+            # test single query
+            with timer("single query by faiss"):
+                scores, indices = retriever.retrieve_faiss(query)
+
+            # test bulk
+            with timer("bulk query by exhaustive search"):
+                df = retriever.retrieve_faiss(full_ds)
+                df["correct"] = df["original_context"] == df["context"]
+
+                print("correct retrieval result by faiss", df["correct"].sum() / len(df))
+
+        else:
+            with timer("bulk query by exhaustive search"):
+                df = retriever.retrieve(full_ds)
+                df["correct"] = df["original_context"] == df["context"]
+                print(
+                    "correct retrieval result by exhaustive search",
+                    df["correct"].sum() / len(df),
+                )
+
+            with timer("single query by exhaustive search"):
+                scores, indices = retriever.retrieve(query)

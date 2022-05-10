@@ -3,3 +3,11 @@
 /prediction*
 *__pycache__
 *.sh
+
+# 주엽 파일들
+finetune/
+finetune_result/
+output/
+elasticsearch-5.4.3
+elasticsearch-5.4.3.tar.gz
+.ipynb_checkpoints/

@@ -13,6 +13,10 @@ import argparse
 import pandas as pd
 
 import numpy as np
+<<<<<<< HEAD
+=======
+import pickle
+>>>>>>> 6c44067722ee0eb024a84ed4beedd009f7d206af
 from utils.arguments import DataTrainingArguments, ModelArguments
 from datasets import (
     Dataset,
@@ -38,7 +42,10 @@ from transformers import (
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from dense_retrieval import DenseRetrieval,BertEncoder
 
+<<<<<<< HEAD
 import pickle
+=======
+>>>>>>> 6c44067722ee0eb024a84ed4beedd009f7d206af
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +78,7 @@ def main():
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
+    print(datasets)
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
@@ -119,8 +127,9 @@ def main():
             pickle.dump(datasets, fw)
 
         # pickle 파일 불러와서 사용할 때 주석 풀기!
-        # with open('retrieval_test.pickle', 'rb') as fr:
+        # with open('retrieval.pickle', 'rb') as fr:
         #     datasets = pickle.load(fr)
+
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
@@ -160,7 +169,7 @@ def run_sparse_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
-    data_path: str = "../data",
+    data_path: str = "/opt/ml/input/data/",
     context_path: str = "wikipedia_documents.json",
     retrieval: str = "tfidf",
 ) -> DatasetDict:

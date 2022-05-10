@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import random
+import re
 from typing import Any, Optional, Tuple
 
 import numpy as np
@@ -172,6 +173,7 @@ def postprocess_qa_predictions(
                     ):
                         continue
                     # 길이가 < 0 또는 > max_answer_length인 answer도 고려하지 않습니다.
+                    # .으로 예측하는 것이 많음
                     if (
                         end_index < start_index
                         or end_index - start_index + 1 > max_answer_length
@@ -236,12 +238,19 @@ def postprocess_qa_predictions(
             pred["probability"] = prob
 
         # best prediction을 선택합니다.
+        # 여기서 . 같은거 처리하게 해야겠다.
         if not version_2_with_negative:
-            all_predictions[example["id"]] = predictions[0]["text"]
+            #all_predictions[example["id"]] = predictions[0]["text"]
+            take_ind = 0
+            while predictions[take_ind]['text'] in skips:
+                take_ind += 1
+            
+            all_predictions[example["id"]] = predictions[take_ind]["text"]
+
         else:
             # else case : 먼저 비어 있지 않은 최상의 예측을 찾아야 합니다
             i = 0
-            while predictions[i]["text"] == "":
+            while predictions[i]["text"] in skips: # =="":
                 i += 1
             best_non_null_pred = predictions[i]
 
@@ -256,6 +265,8 @@ def postprocess_qa_predictions(
                 all_predictions[example["id"]] = ""
             else:
                 all_predictions[example["id"]] = best_non_null_pred["text"]
+
+        all_predictions[example["id"]] = proce(all_predictions[example["id"]])
 
         # np.float를 다시 float로 casting -> `predictions`은 JSON-serializable 가능
         all_nbest_json[example["id"]] = [
@@ -354,3 +365,10 @@ def check_no_error(
     if "validation" not in datasets:
         raise ValueError("--do_eval requires a validation dataset")
     return last_checkpoint, max_seq_length
+
+
+def proce(word):
+    word = re.sub(r"\\","",word)
+    return word
+
+skips = ['', '.', '\\',"'", ")", "(", "<", ">", '"', ',', "–"]

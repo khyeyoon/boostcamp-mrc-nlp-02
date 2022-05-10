@@ -3,3 +3,7 @@
 /prediction*
 *__pycache__
 *.sh
+/src/models/
+src/wandb
+src/*.pickle
+src/outputs

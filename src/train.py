@@ -300,7 +300,7 @@ def run_mrc(
         result = metric.compute(predictions=p.predictions, references=p.label_ids)
         result['eval_exact_match'] = result["exact_match"]
         result['eval_f1'] = result['f1']
-        print('result',result)
+        #print('result',result)
         return result
 
     # Trainer 초기화

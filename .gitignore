@@ -3,3 +3,4 @@
 /prediction*
 *__pycache__
 *.sh
+/models/

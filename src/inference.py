@@ -10,6 +10,7 @@ import sys
 from typing import Callable, Dict, List, NoReturn, Tuple
 
 import numpy as np
+import pickle
 from utils.arguments import DataTrainingArguments, ModelArguments
 from datasets import (
     Dataset,
@@ -92,6 +93,10 @@ def main():
             tokenizer.tokenize, datasets, training_args, data_args,
         )
 
+        # with open('retrieval.pickle', 'rb') as fr:
+        #     datasets = pickle.load(fr)
+
+
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
@@ -102,7 +107,7 @@ def run_sparse_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
-    data_path: str = "../data",
+    data_path: str = "/opt/ml/input/data/",
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
 
@@ -188,7 +193,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 

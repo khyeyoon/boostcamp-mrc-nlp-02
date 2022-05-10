@@ -40,10 +40,6 @@ from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from dense_retrieval import DenseRetrieval,BertEncoder
 
 
-import pickle
-
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -76,6 +72,7 @@ def main():
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
+    print(datasets)
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.

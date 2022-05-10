@@ -36,7 +36,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from utils_qa import check_no_error, postprocess_qa_predictions
+from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from dense_retrieval import DenseRetrieval,BertEncoder
 
 

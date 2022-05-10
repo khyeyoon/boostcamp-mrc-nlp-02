@@ -13,10 +13,7 @@ import argparse
 import pandas as pd
 
 import numpy as np
-<<<<<<< HEAD
-=======
 import pickle
->>>>>>> 6c44067722ee0eb024a84ed4beedd009f7d206af
 from utils.arguments import DataTrainingArguments, ModelArguments
 from datasets import (
     Dataset,
@@ -42,10 +39,6 @@ from transformers import (
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from dense_retrieval import DenseRetrieval,BertEncoder
 
-<<<<<<< HEAD
-import pickle
-=======
->>>>>>> 6c44067722ee0eb024a84ed4beedd009f7d206af
 
 logger = logging.getLogger(__name__)
 

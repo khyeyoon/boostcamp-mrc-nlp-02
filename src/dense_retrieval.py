@@ -18,7 +18,7 @@ from datasets import (
     Dataset,
     DatasetDict,
 )
-from utils.arguments import DataTrainingArguments, ModelArguments
+from utils.arguments import DataTrainingArguments, ModelArguments, DenseRetrievalArguments
 from contextlib import contextmanager
 from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -575,7 +575,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments)
+        (ModelArguments, DataTrainingArguments, DenseRetrievalArguments)
     )
-    args, _ = parser.parse_args_into_dataclasses()
+    args, _, _ = parser.parse_args_into_dataclasses()
     main(args)

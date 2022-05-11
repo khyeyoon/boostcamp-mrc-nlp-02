@@ -18,7 +18,7 @@ from datasets import (
     Dataset,
     DatasetDict,
 )
-from utils.arguments import DataTrainingArguments, ModelArguments, DenseRetrievalArguments
+from utils.arguments import DataTrainingArguments, ModelArguments
 from contextlib import contextmanager
 from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -340,7 +340,7 @@ class DenseRetrieval:
             {'params': [p for n, p in self.q_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        t_total = len(self.train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+        t_total = len(self.train_dataloader) // args.dpr_gradient_accumulation_steps * args.num_train_epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
 
         # Start training!
@@ -575,7 +575,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, DenseRetrievalArguments)
+        (ModelArguments, DataTrainingArguments)
     )
-    args, _, _ = parser.parse_args_into_dataclasses()
+    args, _ = parser.parse_args_into_dataclasses()
     main(args)

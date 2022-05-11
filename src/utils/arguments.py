@@ -34,6 +34,12 @@ class ModelArguments:
             "help": "epoch setting"
         },
     )
+    gradient_accumulation_steps: Optional[int] = field(
+        default=1,
+        metadata={
+            "help": "epoch setting"
+        },
+    )
     batch_size: Optional[int] = field(
         default=4,
         metadata={

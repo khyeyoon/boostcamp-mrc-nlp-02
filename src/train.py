@@ -2,6 +2,9 @@ import os
 import sys
 import logging
 from typing import NoReturn
+import numpy as np
+
+import wandb
 
 from datasets import DatasetDict, load_from_disk, load_metric
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
@@ -50,6 +53,10 @@ def main():
 
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
+
+    # wandb
+    if model_args.wandb=='True':
+        wandb.init(project=model_args.project_name, entity="salt-bread", name=model_args.report_name)
 
     datasets = load_from_disk(data_args.dataset_name)
     print(datasets)
@@ -117,6 +124,29 @@ def run_mrc(
     last_checkpoint, max_seq_length = check_no_error(
         data_args, training_args, datasets, tokenizer
     )
+    def add_embedding_layer(tokenized_examples):
+            additional_ids = np.zeros_like(tokenized_examples['input_ids'])
+
+            start_punc = '@'
+            end_punc = '#'
+
+            start_punc_id = tokenizer.convert_tokens_to_ids(start_punc)
+            end_punc_id = tokenizer.convert_tokens_to_ids(end_punc)
+
+            for i in range(len(tokenized_examples['input_ids'])):
+                ex_ids = tokenized_examples['input_ids'][i]
+                if start_punc_id in ex_ids and end_punc_id in ex_ids:
+                    start_idx = ex_ids.index(start_punc_id)
+                    end_idx = ex_ids.index(end_punc_id)
+                    additional_ids[i][start_idx+1:end_idx] = 1
+                    # print(tokenizer.decode(ex_ids[start_idx+1:end_idx]))
+                else:
+                    continue
+
+            additional_ids = additional_ids.tolist()
+            tokenized_examples.update({"additional_ids": additional_ids})
+
+            return tokenized_examples
 
     # Train preprocessing / 전처리를 진행합니다.
     def prepare_train_features(examples):
@@ -140,7 +170,7 @@ def run_mrc(
         # start_positions과 end_positions을 찾는데 도움을 줄 수 있습니다.
         offset_mapping = tokenized_examples.pop("offset_mapping")
 
-        # 데이터셋에 "start position", "enc position" label을 부여합니다.
+        # 데이터셋에 "start position", "end position" label을 부여합니다.
         tokenized_examples["start_positions"] = []
         tokenized_examples["end_positions"] = []
 
@@ -194,6 +224,10 @@ def run_mrc(
                         token_end_index -= 1
                     tokenized_examples["end_positions"].append(token_end_index + 1)
 
+        if model_args.add_embedding_layer:
+            tokenized_examples = add_embedding_layer(tokenized_examples)
+            # print("*"*10)
+            # print(tokenized_examples['additional_ids'][0])
         return tokenized_examples
 
     if training_args.do_train:
@@ -247,6 +281,9 @@ def run_mrc(
                 (o if sequence_ids[k] == context_index else None)
                 for k, o in enumerate(tokenized_examples["offset_mapping"][i])
             ]
+        
+        if model_args.add_embedding_layer:
+            tokenized_examples = add_embedding_layer(tokenized_examples)
         return tokenized_examples
 
     if training_args.do_eval:

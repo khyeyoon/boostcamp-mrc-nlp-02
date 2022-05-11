@@ -96,22 +96,22 @@ def main():
     if data_args.eval_retrieval:
 
         # pickle 파일 불러와서 사용할거면 if문 전체 주석처리!!
-        if model_args.retrieval=='tfidf':
+        if model_args.retrieval == 'tfidf':
             datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args,retrieval='tfidf',data_path=data_args.dataset_name)
+                tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf', data_path=data_args.dataset_name)
 
-        elif model_args.retrieval=='DPR':
-            datasets = run_dense_retrieval(training_args=training_args,data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
+        elif model_args.retrieval == 'DPR':
+            datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
 
-        elif model_args.retrieval=='BM25':
+        elif model_args.retrieval == 'BM25':
             datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
+                tokenizer.tokenize, datasets, training_args, data_args, retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
         else:
             # 둘 다 이용하기
             print("retrieval : BM25 + DPR")
             sparse_datasets = run_sparse_retrieval(
                 tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
-            dense_datasets = run_dense_retrieval(training_args=training_args,data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
+            dense_datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)
 
             datasets=concat_retrieval(dense_datasets,sparse_datasets)
 
@@ -129,20 +129,20 @@ def main():
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
 def remove_overlap(text):
-    text_arr=list(set(text.split('\n'+"="*150+'\n')))
+    text_arr = list(set(text.split('\n' + "="*150 + '\n')))
     return (' @단락 끝@ @단락 시작@ ').join(text_arr)
 
 def concat_retrieval(sparse_retrieval,dense_retrieval):
-    total=[]
+    total = []
     for index in range(len(sparse_retrieval['validation'])):
-        tmp={}
-        doc_id=dense_retrieval['validation'][index]['id']
-        contexts=sparse_retrieval['validation'][index]['context']+dense_retrieval['validation'][index]['context']
-        question=dense_retrieval['validation'][index]['question']
-        contexts=remove_overlap(contexts)
-        tmp['id']=doc_id
-        tmp['context']=contexts
-        tmp['question']=question
+        tmp = {}
+        doc_id = dense_retrieval['validation'][index]['id']
+        contexts = sparse_retrieval['validation'][index]['context'] + dense_retrieval['validation'][index]['context']
+        question = dense_retrieval['validation'][index]['question']
+        contexts = remove_overlap(contexts)
+        tmp['id'] = doc_id
+        tmp['context'] = contexts
+        tmp['question'] = question
         total.append(tmp)
 
     cqas = pd.DataFrame(total)
@@ -216,7 +216,7 @@ def run_sparse_retrieval(
         print("tfidf finished")
     else:
         print("retrieval : BM25")
-        datasets=retriever.BM25(datasets["validation"], topk=data_args.top_k_retrieval)
+        datasets = retriever.BM25(datasets["validation"], topk=data_args.top_k_retrieval)
         print("BM25 finished")
 
     return datasets
@@ -236,14 +236,14 @@ def run_dense_retrieval(
     p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
     q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
 
-    with open(os.path.join(data_path,context_path), "r", encoding='utf-8') as f:
+    with open(os.path.join(data_path, context_path), "r", encoding='utf-8') as f:
         wiki = json.load(f)
 
     # 대회 validation set
     dataset = load_from_disk(os.path.join(data_path, "test_dataset"))
 
     train_args = TrainingArguments(
-        output_dir= model_args.save_dir,
+        output_dir=model_args.save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=model_args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
@@ -252,7 +252,7 @@ def run_dense_retrieval(
         weight_decay=0.01,
     )
 
-    retriever = DenseRetrieval(args = [train_args,model_args], dataset=[wiki, dataset['validation']], tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder, mode='inference')
+    retriever = DenseRetrieval(args=[train_args, model_args], dataset=[wiki, dataset['validation']], tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder, mode='inference')
     
     df = retriever.retrieve(dataset["validation"], topk=data_args.top_k_retrieval)
 

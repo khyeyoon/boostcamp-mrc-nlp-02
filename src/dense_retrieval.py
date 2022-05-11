@@ -512,7 +512,7 @@ def main(args):
 
     # 대회 데이터셋 불러오기
     if args.dataset=='wiki':
-        dataset_train = load_from_disk("../data/train_dataset/")
+        dataset_train = load_from_disk("../../data/train_dataset/")
         train_dataset = dataset_train['train']
 
     # korQuad 불러오기
@@ -550,7 +550,7 @@ def main(args):
         # dataset = load_dataset("squad_kor_v1")['train']
 
         # 대회 validation set
-        dataset = load_from_disk("../data/train_dataset/")
+        dataset = load_from_disk("../../data/train_dataset/")
         dataset = dataset['validation']
 
         retriever = DenseRetrieval(args=[train_args, args], dataset=dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder,mode='test')

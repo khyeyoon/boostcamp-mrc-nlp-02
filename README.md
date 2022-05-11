@@ -124,7 +124,7 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
 --report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
 --model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 --fp16 \
- --do_predict
+--overwrite_output_dir True --do_predict
 ```
 
 ### How to submit
@@ -161,5 +161,5 @@ python train.py --output_dir ./models/train_dataset \
 python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
 --report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
 --model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 \
- --do_predict
+--overwrite_output_dir True --do_predict
 ```

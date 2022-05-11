@@ -86,7 +86,7 @@ class SparseRetrieval:
 
         if mode!='inference':
 
-            self.dataset = load_from_disk('../data/train_dataset')['validation']
+            self.dataset = load_from_disk('../../data/train_dataset')['validation']
 
             self.contexts = list(
                 dict.fromkeys([v["context"] for v in self.dataset])

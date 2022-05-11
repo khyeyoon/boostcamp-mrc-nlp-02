@@ -50,8 +50,8 @@ set_seed(42) # magic number :)
 class DenseRetrieval:
     def __init__(self, args, dataset, tokenizer, p_encoder, q_encoder, num_neg=2, mode='train', bm25=False):
 
-        self.args = args[0]
-        self.additional_args = args[1]
+        self.args = args[0] # TrainingArguments
+        self.additional_args = args[1] # ModelArguments
         self.dataset = dataset
         self.num_neg = num_neg
 
@@ -340,7 +340,7 @@ class DenseRetrieval:
             {'params': [p for n, p in self.q_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-        t_total = len(self.train_dataloader) // args.dpr_gradient_accumulation_steps * args.num_train_epochs
+        t_total = len(self.train_dataloader) // self.additional_args.dpr_gradient_accumulation_steps * args.num_train_epochs
         scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
 
         # Start training!

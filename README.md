@@ -81,9 +81,6 @@ def prepare_train_features(examples):
 ```
 
 ```bash
-# 학습 예시 (train_dataset 사용)
-python train.py --output_dir ./models/train_dataset --do_train
-
 # DPR 학습 예시
 python dense_retrieval.py --batch_size 4 --report_name BERT_neg3_bm2 --bm25 True --epochs 3 --num_neg 3 --bm_num 2 --dataset wiki --wandb False --test_query True --dpr_gradient_accumulation_steps 16
 ```
@@ -93,8 +90,24 @@ python dense_retrieval.py --batch_size 4 --report_name BERT_neg3_bm2 --bm25 True
 MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 예시에 단순히 `--do_eval` 을 추가로 입력해서 훈련 및 평가를 동시에 진행할 수도 있습니다.
 
 ```bash
+# 학습, mrc 모델 평가 예시 (train_dataset 사용)
+python train.py --output_dir ./models/train_dataset \
+--per_device_train_batch_size 16 \
+--per_device_eval_batch_size 16 \
+--eval_steps 10 --save_strategy steps --save_steps 500 \
+--evaluation_strategy steps \
+--model_name_or_path klue/roberta-large \
+--num_train_epochs 2 \
+--save_total_limit 3 \
+--greater_is_better True \
+--metric_for_best_model exact_match \
+--fp16 True \
+--load_best_model_at_end True \
+--overwrite_output_dir True \
+--do_train --do_eval
+
 # mrc 모델 평가 (train_dataset 사용)
-python train.py --output_dir ./outputs/train_dataset --model_name_or_path ./models/train_dataset/ --do_eval 
+# python train.py --output_dir ./outputs/train_dataset --model_name_or_path ./models/train_dataset/ --do_eval 
 ```
 
 ### inference
@@ -108,7 +121,10 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 ```bash
 # ODQA 실행 (test_dataset 사용)
 # wandb 가 로그인 되어있다면 자동으로 결과가 wandb 에 저장됩니다. 아니면 단순히 출력됩니다
-python inference.py --output_dir ./outputs/roBERTa_step10_top20/ --report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 20 --dataset_name /opt/ml/input/data/test_dataset --model_name_or_path ./models/train_dataset/ --do_predict --fp16 --per_device_eval_batch_size 64 
+python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
+--report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
+--model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 --fp16 \
+ --do_predict
 ```
 
 ### How to submit
@@ -125,22 +141,25 @@ python inference.py --output_dir ./outputs/roBERTa_step10_top20/ --report_name B
 
 ### train ex
 ```
-python train.py --output_dir ../models/roberta_large \
+python train.py --output_dir ./models/train_dataset \
 --per_device_train_batch_size 16 \
 --per_device_eval_batch_size 16 \
 --eval_steps 10 --save_strategy steps --save_steps 500 \
---evaluation_strategy  steps \
+--evaluation_strategy steps \
 --model_name_or_path klue/roberta-large \
 --num_train_epochs 2 \
 --save_total_limit 3 \
 --greater_is_better True \
 --metric_for_best_model exact_match \
 --fp16 True \
---load_best_model_at_end True --do_train --do_eval
+--load_best_model_at_end True \
+--overwrite_output_dir True \
+--do_train --do_eval
 ```
 ### inference ex
 ```
-python inference.py --output_dir ../outputs/roberta_large_pred/ \
---dataset_name ../../data/test_dataset/ --model_name_or_path ../models/roberta_large/ \
---top_k_retrieval 50 --do_predict
+python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
+--report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
+--model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 \
+ --do_predict
 ```

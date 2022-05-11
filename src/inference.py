@@ -288,6 +288,8 @@ def run_dense_retrieval(
     # validation
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
     print("finished DPR")
+    with open('retrieval_DPR_top'+str(data_args.top_k_retrieval)+'.pickle','wb') as fw:
+    pickle.dump(datasets, fw)
 
     return datasets
 

@@ -11,6 +11,9 @@ from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
+    ElectraTokenizer,
+    ElectraModel,
+    #ElectraModelForQuestionAnswering,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
@@ -75,6 +78,27 @@ def main():
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
     )
+
+
+    # config = AutoConfig.from_pretrained(
+    #     model_args.config_name
+    #     if model_args.config_name is not None
+    #     else model_args.model_name_or_path,
+    # )
+    # tokenizer = ElectraTokenizer.from_pretrained(
+    #     model_args.tokenizer_name
+    #     if model_args.tokenizer_name is not None
+    #     else model_args.model_name_or_path,
+    #     # 'use_fast' argument를 True로 설정할 경우 rust로 구현된 tokenizer를 사용할 수 있습니다.
+    #     # False로 설정할 경우 python으로 구현된 tokenizer를 사용할 수 있으며,
+    #     # rust version이 비교적 속도가 빠릅니다.
+    #     use_fast=True,
+    # )
+    # model = ElectraModelForQuestionAnswering.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     from_tf=bool(".ckpt" in model_args.model_name_or_path),
+    #     config=config,
+    # )
 
     print(
         type(training_args),
@@ -222,7 +246,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 

@@ -144,7 +144,7 @@ def run_mrc(
 
     # Train preprocessing / 전처리를 진행합니다.
     def prepare_train_features(examples):
-        # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
+        # truncation과 padding(length가 짧을때만)을 통해 tokenization을 진행하며, stride를 이용하여 overflow를 유지합니다.
         # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
         tokenized_examples = tokenizer(
             examples[question_column_name if pad_on_right else context_column_name],
@@ -164,7 +164,7 @@ def run_mrc(
         # start_positions과 end_positions을 찾는데 도움을 줄 수 있습니다.
         offset_mapping = tokenized_examples.pop("offset_mapping")
 
-        # 데이터셋에 "start position", "enc position" label을 부여합니다.
+        # 데이터셋에 "start position", "end position" label을 부여합니다.
         tokenized_examples["start_positions"] = []
         tokenized_examples["end_positions"] = []
 
@@ -348,6 +348,7 @@ def run_mrc(
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
+        print(checkpoint, '@@@@@@@@@@@@@@checkpoint')
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 

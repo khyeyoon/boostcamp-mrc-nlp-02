@@ -175,15 +175,3 @@ class DataTrainingArguments:
     use_faiss: bool = field( # False
         default=False, metadata={"help": "Whether to build with faiss"}
     )
-
-@dataclass
-class DenseRetrievalArguments:
-    """
-    Arguments of DenseRetrieval
-    """
-    gradient_accumulation_steps: Optional[int] = field(
-        default=1,
-        metadata={
-            "help": "epoch setting"
-        },
-    )

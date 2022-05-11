@@ -98,7 +98,7 @@ def main():
         # pickle 파일 불러와서 사용할거면 if문 전체 주석처리!!
         if model_args.retrieval == 'tfidf':
             datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf', data_path=data_args.dataset_name)
+                tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf', data_path="/".join(data_args.dataset_name.split('/')[:-1]))
 
         elif model_args.retrieval == 'DPR':
             datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-1]), data_args=data_args, model_args=model_args)

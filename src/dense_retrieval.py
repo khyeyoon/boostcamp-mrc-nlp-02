@@ -113,7 +113,7 @@ class DenseRetrieval:
                     "id": example["id"],
                     # Retrieve한 Passage의 id, context를 반환합니다.
                     "context_id": doc_indices[idx],
-                    "context": " ".join(
+                    "context": ('\n'+"="*150+'\n').join(
                         [self.contexts[pid] for pid in doc_indices[idx]]
                     ),
                 }

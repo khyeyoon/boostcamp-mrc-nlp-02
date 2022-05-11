@@ -122,3 +122,19 @@ python inference.py --output_dir ./outputs/roBERTa_step10_top20/ --report_name B
 2. 모델의 경우 `--overwrite_cache` 를 추가하지 않으면 같은 폴더에 저장되지 않습니다. 
 
 3. `./outputs/` 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
+
+### train ex
+```
+python train.py --output_dir ../models/roberta_large \
+--per_device_train_batch_size 16 \
+--per_device_eval_batch_size 16 \
+--eval_steps 10 --save_strategy steps --save_steps 500 \
+--evaluation_strategy  steps \
+--model_name_or_path klue/roberta-large \
+--num_train_epochs 2 \
+--save_total_limit 3 \
+--greater_is_better True \
+--metric_for_best_model exact_match \
+--fp16 True \
+--load_best_model_at_end True --do_train --do_eval
+```

@@ -63,18 +63,18 @@ class DenseRetrieval:
         self.p_embs = None
         self.mode = mode
 
-        if bm25=='True':
+        if bm25 == 'True':
             corpus = np.array(list(set([example for example in self.dataset['context']])))
 
             tokenized_corpus = [self.split_space(doc) for doc in corpus]
             self.bm25 = BM25Okapi(tokenized_corpus)
 
-        if mode=='train':
+        if mode == 'train':
             self.prepare_in_batch_negative()
 
         else:
             # infernce를 위한 passages 임베딩 시 수행 (default=train)
-            if mode=='inference':
+            if mode == 'inference':
                 self.get_dense_embedding(dataset)
             else:
                 self.get_dense_embedding(dataset)
@@ -91,7 +91,7 @@ class DenseRetrieval:
             print("[Search query]\n", query_or_dataset, "\n")
 
             for i in range(topk):
-                print(f"Top-{i+1} passage with score {doc_scores[i]:4f}")
+                print(f"Top-{i + 1} passage with score {doc_scores[i]:4f}")
                 print(self.contexts[doc_indices[i]])
 
             return (doc_scores, [self.contexts[doc_indices[i]] for i in range(topk)])
@@ -113,7 +113,7 @@ class DenseRetrieval:
                     "id": example["id"],
                     # Retrieve한 Passage의 id, context를 반환합니다.
                     "context_id": doc_indices[idx],
-                    "context": ('\n'+"="*150+'\n').join(
+                    "context": ('\n' + "="*150 + '\n').join(
                         [self.contexts[pid] for pid in doc_indices[idx]]
                     ),
                 }
@@ -136,14 +136,14 @@ class DenseRetrieval:
         BATCHSIZE = 32
 
         if self.mode=='inference':
-            passages, questions = dataset[0],dataset[1]
+            passages, questions = dataset[0], dataset[1]
 
-            passages_list=[]
+            passages_list = []
             for idx, p in enumerate(passages):
                 passages[str(idx)]['text']
                 passages_list.append(passages[str(idx)]['text'])
 
-            print('[passages num]:',len(passages_list))
+            print('[passages num]:', len(passages_list))
 
             p_seqs = tokenizer(passages_list, padding="max_length", truncation=True, return_tensors='pt')
 
@@ -157,7 +157,7 @@ class DenseRetrieval:
                 p_encoder.eval()
                 p_embs=[]
 
-                with tqdm(self.passage_dataloader , unit="batch") as tepoch:
+                with tqdm(self.passage_dataloader, unit="batch") as tepoch:
                     for idx, batch in enumerate(tepoch):
 
                         p_inputs = {
@@ -169,7 +169,7 @@ class DenseRetrieval:
                         p_outputs = self.p_encoder(**p_inputs) # (batch_size*(num_neg+1), emb_dim)
                         p_embs.append(p_outputs)
 
-            self.p_embs= torch.concat(p_embs, dim=0)
+            self.p_embs = torch.concat(p_embs, dim=0)
             self.contexts = passages_list
 
         else:
@@ -177,7 +177,7 @@ class DenseRetrieval:
             q_seqs = tokenizer(dataset['question'], padding="max_length", truncation=True, return_tensors='pt')
             p_seqs = tokenizer(dataset['context'], padding="max_length", truncation=True, return_tensors='pt')
 
-            print(q_seqs['input_ids'].shape,p_seqs['input_ids'].shape)
+            print(q_seqs['input_ids'].shape, p_seqs['input_ids'].shape)
 
             train_dataset = TensorDataset(
                 p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
@@ -195,9 +195,9 @@ class DenseRetrieval:
             with torch.no_grad():
                 p_encoder.eval()
                 q_encoder.eval()
-                p_embs,q_embs=[],[]
+                p_embs, q_embs = [], []
 
-                with tqdm(dataloader , unit="batch") as tepoch:
+                with tqdm(dataloader, unit="batch") as tepoch:
                     for idx, batch in enumerate(tepoch):
 
                         p_inputs = {
@@ -217,33 +217,32 @@ class DenseRetrieval:
                         q_outputs = self.q_encoder(**q_inputs) # (batch_size*, emb_dim)
                         q_embs.append(q_outputs)
 
-            self.q_embs= torch.concat(q_embs, dim=0)
-            self.p_embs= torch.concat(p_embs, dim=0)
+            self.q_embs = torch.concat(q_embs, dim=0)
+            self.p_embs = torch.concat(p_embs, dim=0)
 
     def compute_topk(self):
         dataset_len = self.q_embs.size(0)
-        top1,top20,top100=0,0,0
+        top1, top20, top100 = 0, 0, 0
 
         # 쿼리 하나씩 받아오면서 계산하기 
         for idx in range(dataset_len):
-
             q_emb = self.q_embs[idx,:]
             
             dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embs, 0, 1))
             rank = torch.argsort(dot_prod_scores, dim=0, descending=True).squeeze()
 
             if idx in rank[:100]:
-                top100+=1
+                top100 += 1
             if idx in rank[:20]:
-                top20+=1
+                top20 += 1
             if idx == rank[0]:
-                top1+=1
+                top1 += 1
 
-        top1_acc=top1/dataset_len
-        top20_acc=top20/dataset_len
-        top100_acc=top100/dataset_len
+        top1_acc = top1/dataset_len
+        top20_acc = top20/dataset_len
+        top100_acc = top100/dataset_len
 
-        print('[Top-1 acc]',top1_acc,' | ','[Top-20 acc]',top20_acc,' | ','[Top-100 acc]', top100_acc)
+        print('[Top-1 acc]', top1_acc, ' | ', '[Top-20 acc]', top20_acc, ' | ', '[Top-100 acc]', top100_acc)
 
     def split_space(self, sent):
         return sent.split(" ")
@@ -271,14 +270,13 @@ class DenseRetrieval:
         p_with_neg = []
         
         if self.bm25:
-            num=self.num_neg+1+self.additional_args.bm_num
+            num = self.num_neg + 1 + self.additional_args.bm_num
         else:
-            num=self.num_neg+1
+            num = self.num_neg + 1
 
         print("prepare_in_batch_negative")
         with tqdm(dataset['context'], unit="batch") as tepoch:
             for idx, c in enumerate(tepoch):
-            
                 while True:
                     neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
 
@@ -287,25 +285,24 @@ class DenseRetrieval:
 
                         p_with_neg.append(c)
                         p_with_neg.extend(p_neg)
-                        
 
                         # BM25로 질문과 유사도 높은 지문 negative sample로 추가 (--bm_num으로 몇개 추가할건지 설정가능)
                         if self.bm25:
-                            cnt=0
-                            top_n_passages=self.BM25(dataset['question'][idx], corpus)
+                            cnt = 0
+                            top_n_passages = self.BM25(dataset['question'][idx], corpus)
                             
                             for p in top_n_passages:
-                                if p!=c:
+                                if p != c:
                                     p_with_neg.append(p)
-                                    cnt+=1
-                                if cnt==self.additional_args.bm_num:
+                                    cnt += 1
+                                if cnt == self.additional_args.bm_num:
                                     break
 
                             # BM25로 질문과 유사도 높은 지문 negative sample로 추가 (성능 별로 좋지 않았음, 전처리 오래 걸림!)
-                            # top_n_passages=self.BM25(dataset['context'][idx], corpus)
+                            # top_n_passages = self.BM25(dataset['context'][idx], corpus)
                             
                             # for p in top_n_passages:
-                            #     if p!=c:
+                            #     if p != c:
                             #         p_with_neg.append(p)
                             #         break
                         break
@@ -357,9 +354,9 @@ class DenseRetrieval:
         train_iterator = tqdm(range(int(args.num_train_epochs)), desc="Epoch")
 
         if self.bm25:
-            num=self.num_neg+1+self.additional_args.bm_num
+            num = self.num_neg + 1 + self.additional_args.bm_num
         else:
-            num=self.num_neg+1
+            num = self.num_neg + 1
 
         for _ in train_iterator:
 
@@ -402,7 +399,7 @@ class DenseRetrieval:
                         wandb.log({"loss": loss})
 
                     # loss 값 제일 낮을 때 encoder 저장
-                    if loss<global_loss:
+                    if loss < global_loss:
                         global_loss=loss
                         # model save
                         save_path= self.additional_args.save_dir
@@ -467,12 +464,12 @@ class DenseRetrieval:
 
         rank = torch.argsort(dot_prod_scores, descending=True) 
 
-        tensor_stack=[]
+        tensor_stack = []
         for i in range(dot_prod_scores.size(0)):
-            tensor_stack.append(dot_prod_scores[i,rank[i,:k]])
+            tensor_stack.append(dot_prod_scores[i, rank[i, :k]])
 
-        doc_scores=torch.stack(tensor_stack, dim=0).tolist()
-        doc_indices = rank[:,:k].tolist()
+        doc_scores = torch.stack(tensor_stack, dim=0).tolist()
+        doc_indices = rank[:, :k].tolist()
         
         return doc_scores, doc_indices
   
@@ -505,22 +502,22 @@ def main(args):
     # arguments.py 참고 (--epochs --batch_size --num_neg --save_dir --report_name --project_name --wandb --test_query --bm25 --bm_num --dataset --topk)
     # [example] python dense_retrieval.py --report_name HY-BERT_baseline_wiki_BM25_ex3 --bm25 True --num_neg 4 --bm_num 2 --dataset wiki --wandb True
     
-    if args.wandb=='True':
+    if args.wandb == 'True':
         wandb.init(project=args.project_name, entity="salt-bread", name=args.report_name)
     
     print(args)
 
     # 대회 데이터셋 불러오기
-    if args.dataset=='wiki':
+    if args.dataset == 'wiki':
         dataset_train = load_from_disk("../../data/train_dataset/")
         train_dataset = dataset_train['train']
 
     # korQuad 불러오기
-    if args.dataset=='squad_kor_v1':
+    if args.dataset == 'squad_kor_v1':
         train_dataset = load_dataset("squad_kor_v1")['train']
 
     train_args = TrainingArguments(
-        output_dir= args.save_dir,
+        output_dir=args.save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
@@ -539,7 +536,7 @@ def main(args):
     retriever = DenseRetrieval(args=[train_args, args], dataset=train_dataset, bm25=args.bm25 ,num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
     retriever.train()
 
-    if args.test_query=='True':
+    if args.test_query == 'True':
     
         model_checkpoint = 'klue/bert-base'
         tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
@@ -553,11 +550,11 @@ def main(args):
         dataset = load_from_disk("../../data/train_dataset/")
         dataset = dataset['validation']
 
-        retriever = DenseRetrieval(args=[train_args, args], dataset=dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder,mode='test')
+        retriever = DenseRetrieval(args=[train_args, args], dataset=dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder, mode='test')
 
         # # 단일 쿼리 테스트 (str)
         index = 0
-        doc_scores, doc_indices = retriever.get_relevant_doc(query=dataset[index]['question'] ,k=args.topk)
+        doc_scores, doc_indices = retriever.get_relevant_doc(query=dataset[index]['question'], k=args.topk)
 
         print(f"[Search Query] {dataset[index]['question']}\n")
         print(f"[Passage] {dataset[index]['context']}\n")
@@ -582,4 +579,3 @@ if __name__ == '__main__':
     )
     args, _ = parser.parse_args_into_dataclasses()
     main(args)
-    

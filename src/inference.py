@@ -233,8 +233,9 @@ def run_dense_retrieval(
     model_checkpoint = model_args.model_name_or_path
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-    p_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/p_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
-    q_encoder = BertEncoder.from_pretrained("/opt/ml/input/code/dense_retrieval/q_encoder-HY-BERT_baseline_wiki_BM25_ex1").to(device)
+
+    p_encoder = BertEncoder.from_pretrained("./dense_retrieval/p_encoder-" + model_args.report_name).to(device)
+    q_encoder = BertEncoder.from_pretrained("./dense_retrieval/q_encoder-" + model_args.report_name).to(device)
 
     with open(os.path.join(data_path, context_path), "r", encoding='utf-8') as f:
         wiki = json.load(f)

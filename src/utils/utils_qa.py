@@ -243,6 +243,9 @@ def postprocess_qa_predictions(
             #all_predictions[example["id"]] = predictions[0]["text"]
             take_ind = 0
             while predictions[take_ind]['text'] in skips:
+                if take_ind >= len(predictions)-1:
+                    take_ind = 0
+                    break
                 take_ind += 1
             
             all_predictions[example["id"]] = predictions[take_ind]["text"]
@@ -251,6 +254,9 @@ def postprocess_qa_predictions(
             # else case : 먼저 비어 있지 않은 최상의 예측을 찾아야 합니다
             i = 0
             while predictions[i]["text"] in skips: # =="":
+                if i >= len(predictions)-1:
+                    i = 0
+                    break
                 i += 1
             best_non_null_pred = predictions[i]
 

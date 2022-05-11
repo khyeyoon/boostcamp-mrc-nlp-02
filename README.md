@@ -83,6 +83,9 @@ def prepare_train_features(examples):
 ```bash
 # 학습 예시 (train_dataset 사용)
 python train.py --output_dir ./models/train_dataset --do_train
+
+# DPR 학습 예시
+python dense_retrieval.py --batch_size 4 --report_name BERT_neg3_bm2 --bm25 True --epochs 3 --num_neg 3 --bm_num 2 --dataset wiki --wandb False --test_query True --gradient_accumulation_steps 16
 ```
 
 ### eval
@@ -105,7 +108,7 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 ```bash
 # ODQA 실행 (test_dataset 사용)
 # wandb 가 로그인 되어있다면 자동으로 결과가 wandb 에 저장됩니다. 아니면 단순히 출력됩니다
-python inference.py --output_dir ./outputs/test_dataset/ --dataset_name ../data/test_dataset/ --model_name_or_path ./models/train_dataset/ --do_predict
+python inference.py --retrieval dual --top_k_retrieval 20 --output_dir ./outputs/roBERTa_step10_top20/ --dataset_name /opt/ml/input/data/test_dataset --model_name_or_path ./models/train_dataset/ --do_predict --fp16 --per_device_eval_batch_size 64 
 ```
 
 ### How to submit

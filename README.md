@@ -138,3 +138,9 @@ python train.py --output_dir ../models/roberta_large \
 --fp16 True \
 --load_best_model_at_end True --do_train --do_eval
 ```
+### inference ex
+```
+python inference.py --output_dir ../outputs/roberta_large_pred/ \
+--dataset_name ../../data/test_dataset/ --model_name_or_path ../models/roberta_large/ \
+--top_k_retrieval 50 --do_predict
+```

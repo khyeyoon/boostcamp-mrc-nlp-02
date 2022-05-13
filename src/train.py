@@ -7,6 +7,7 @@ from datasets import DatasetDict, load_from_disk, load_metric
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from utils.arguments import DataTrainingArguments, ModelArguments
 from utils.trainer_qa import QuestionAnsweringTrainer
+from utils.model import get_config_tokenizer_model
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -20,7 +21,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 logger = logging.getLogger(__name__)
 
 
@@ -57,48 +58,9 @@ def main():
     datasets = load_from_disk(data_args.dataset_name)
     print(datasets)
 
-    # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
-    # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
-    config = AutoConfig.from_pretrained(
-        model_args.config_name
-        if model_args.config_name is not None
-        else model_args.model_name_or_path,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name
-        if model_args.tokenizer_name is not None
-        else model_args.model_name_or_path,
-        # 'use_fast' argument를 True로 설정할 경우 rust로 구현된 tokenizer를 사용할 수 있습니다.
-        # False로 설정할 경우 python으로 구현된 tokenizer를 사용할 수 있으며,
-        # rust version이 비교적 속도가 빠릅니다.
-        use_fast=True,
-    )
-    model = AutoModelForQuestionAnswering.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-    )
+    # config, tokenizer, 모델 로드
+    config, tokenizer, model = get_config_tokenizer_model(model_args)
 
-
-    # config = AutoConfig.from_pretrained(
-    #     model_args.config_name
-    #     if model_args.config_name is not None
-    #     else model_args.model_name_or_path,
-    # )
-    # tokenizer = ElectraTokenizer.from_pretrained(
-    #     model_args.tokenizer_name
-    #     if model_args.tokenizer_name is not None
-    #     else model_args.model_name_or_path,
-    #     # 'use_fast' argument를 True로 설정할 경우 rust로 구현된 tokenizer를 사용할 수 있습니다.
-    #     # False로 설정할 경우 python으로 구현된 tokenizer를 사용할 수 있으며,
-    #     # rust version이 비교적 속도가 빠릅니다.
-    #     use_fast=True,
-    # )
-    # model = ElectraModelForQuestionAnswering.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     from_tf=bool(".ckpt" in model_args.model_name_or_path),
-    #     config=config,
-    # )
 
     print(
         type(training_args),
@@ -348,6 +310,7 @@ def run_mrc(
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
+        print('checkpoint', checkpoint)
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 

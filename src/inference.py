@@ -119,7 +119,7 @@ def main():
         with open('retrieval.pickle','wb') as fw:
             pickle.dump(datasets, fw)
 
-        # pickle 파일 불러와서 사용할 때 주석 풀기!
+        #pickle 파일 불러와서 사용할 때 주석 풀기!
         # with open('retrieval.pickle', 'rb') as fr:
         #     datasets = pickle.load(fr)
 

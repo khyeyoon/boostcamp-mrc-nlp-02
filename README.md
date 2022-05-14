@@ -19,7 +19,7 @@ bash ./install/install_requirements.sh
 
 ### 저장소 구조
 
-```bash
+```
 .
 ├── code[github repository]
 |   ├── assets                          # readme 에 필요한 이미지 저장
@@ -80,7 +80,7 @@ bash ./install/install_requirements.sh
 
 데이터셋은 편의성을 위해 Huggingface 에서 제공하는 datasets를 이용하여 pyarrow 형식의 데이터로 저장되어있습니다. 다음은 데이터셋의 구성입니다.
 
-```bash
+```
 data                                # 전체 데이터
 ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
 |   ├── train                       
@@ -99,6 +99,12 @@ data에 대한 argument 는 `arguments.py` 의 `DataTrainingArguments` 에서 �
 ### train
 
 만약 arguments 에 대한 세팅을 직접하고 싶다면 `arguments.py` 를 참고해주세요. 
+```bash
+python ./src/train.py \
+--output_dir ../models/output \
+--do_train
+```
+
 
 ### eval
 
@@ -108,25 +114,6 @@ MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 
 # 학습, mrc 모델 평가 예시 (train_dataset 사용)
 python ./src/train.py \
 --output_dir "../models/output" \
---per_device_train_batch_size 16 \
---per_device_eval_batch_size 16 \
---eval_steps 100 --save_strategy steps --save_steps 100 \
---evaluation_strategy steps \
---model_name_or_path "klue/roberta-large" \
---num_train_epochs 2 \
---save_total_limit 3 \
---greater_is_better True \
---metric_for_best_model exact_match \
---fp16 True \
---load_best_model_at_end True \
---overwrite_output_dir True \
---do_train --do_eval
-```
-
-```bash
-# mrc 모델 평가 (train_dataset 사용)
-# python train.py \
---output_dir "../outputs/output" \
 --model_name_or_path "../models/output" \
 --do_eval 
 ```
@@ -143,13 +130,9 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 # ODQA 실행 (test_dataset 사용)
 # wandb 가 로그인 되어있다면 자동으로 결과가 wandb 에 저장됩니다. 아니면 단순히 출력됩니다
 python ./src/inference.py \
---model_name_or_path "../models/output" \
---output_dir "../predictions/prediction" \
+--output_dir "../models/output" \
 --dataset_name "../data/test_dataset" \
---per_device_eval_batch_size 64
---retrieval "both" \
---fp16 \
---top_k_retrieval 20 \
+--model_name_or_path "../models/output/" \
 --do_predict
 ```
     

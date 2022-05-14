@@ -402,10 +402,13 @@ class DenseRetrieval:
                     if loss < global_loss:
                         global_loss=loss
                         # model save
-                        save_path= self.additional_args.save_dir
-                        os.makedirs(save_path, exist_ok=True)
-                        self.p_encoder.save_pretrained(os.path.join(save_path, f"p_encoder-{self.additional_args.report_name}"))
-                        self.q_encoder.save_pretrained(os.path.join(save_path, f"q_encoder-{self.additional_args.report_name}"))
+                        
+                        os.makedirs(self.additional_args.encoder_save_dir, exist_ok=True)
+                        p_encoder_save_path = os.path.join(self.additional_args.encoder_save_dir, f"p_encoder")
+                        q_encoder_save_path = os.path.join(self.additional_args.encoder_save_dir, f"q_encoder")
+                        
+                        self.p_encoder.save_pretrained(p_encoder_save_path)
+                        self.q_encoder.save_pretrained(q_encoder_save_path)
 
                     tepoch.set_postfix(loss=f'{str(loss.item())}')
 
@@ -509,7 +512,7 @@ def main(args):
 
     # 대회 데이터셋 불러오기
     if args.dataset == 'wiki':
-        dataset_train = load_from_disk("../../data/train_dataset/")
+        dataset_train = load_from_disk("../data/train_dataset/")
         train_dataset = dataset_train['train']
 
     # korQuad 불러오기
@@ -517,7 +520,7 @@ def main(args):
         train_dataset = load_dataset("squad_kor_v1")['train']
 
     train_args = TrainingArguments(
-        output_dir=args.save_dir,
+        output_dir=args.encoder_save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
@@ -540,14 +543,17 @@ def main(args):
     
         model_checkpoint = 'klue/bert-base'
         tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-        p_encoder = BertEncoder.from_pretrained(os.path.join(args.save_dir, f"p_encoder-{args.report_name}")).to(train_args.device)
-        q_encoder = BertEncoder.from_pretrained(os.path.join(args.save_dir, f"q_encoder-{args.report_name}")).to(train_args.device)
+        p_encoder_path = os.path.join(args.encoder_save_dir, f"p_encoder")
+        q_encoder_path = os.path.join(args.encoder_save_dir, f"q_encoder")
+        
+        p_encoder = BertEncoder.from_pretrained(p_encoder_path).to(train_args.device)
+        q_encoder = BertEncoder.from_pretrained(q_encoder_path).to(train_args.device)
 
         # squad_kor_v1 데이터셋
         # dataset = load_dataset("squad_kor_v1")['train']
 
         # 대회 validation set
-        dataset = load_from_disk("../../data/train_dataset/")
+        dataset = load_from_disk("../data/train_dataset/")
         dataset = dataset['validation']
 
         retriever = DenseRetrieval(args=[train_args, args], dataset=dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder, mode='test')

@@ -98,26 +98,28 @@ def main():
         if data_args.eval_retrieval:
             if model_args.retrieval.upper() == 'TFIDF':
                 datasets = run_sparse_retrieval(
-                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
+                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf')
 
             elif model_args.retrieval.upper() == 'DPR':
-                datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-2]), data_args=data_args, model_args=model_args)
+                datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
 
             elif model_args.retrieval.upper() == 'BM25':
                 datasets = run_sparse_retrieval(
-                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
+                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='BM25')
             else:
                 # 둘 다 이용하기
                 print("retrieval : BM25 + DPR")
                 sparse_datasets = run_sparse_retrieval(
-                    tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
-                dense_datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-2]), data_args=data_args, model_args=model_args)
+                    tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25')
+                dense_datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
 
                 datasets=concat_retrieval(dense_datasets,sparse_datasets)
 
             # 데이터셋 pickle 파일 저장하기
-            with open('retrieval.pickle','wb') as fw:
+            with open('../data/retrieval.pickle','wb') as fw:
                 pickle.dump(datasets, fw)
+            print(f"../data/retrieval.pickle 에 전체 retrieval 결과 저장")    
+            
     else:
         print(f"{data_args.retrieval_pickle_data}를 불러옵니다.")
         try:
@@ -164,7 +166,7 @@ def run_sparse_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
-    data_path: str = "/opt/ml/input/data/",
+    data_path: str = "../data/",
     context_path: str = "wikipedia_documents.json",
     retrieval: str = "tfidf",
 ) -> DatasetDict:
@@ -235,9 +237,11 @@ def run_dense_retrieval(
     model_checkpoint = model_args.model_name_or_path
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-
-    p_encoder = BertEncoder.from_pretrained("./dense_retrieval/p_encoder-" + model_args.report_name).to(device)
-    q_encoder = BertEncoder.from_pretrained("./dense_retrieval/q_encoder-" + model_args.report_name).to(device)
+    p_encoder_path = os.path.join(model_args.encoder_save_dir, "p_encoder")
+    q_encoder_path = os.path.join(model_args.encoder_save_dir, "q_encoder")
+    
+    p_encoder = BertEncoder.from_pretrained(p_encoder_path).to(device)
+    q_encoder = BertEncoder.from_pretrained(q_encoder_path).to(device)
 
     with open(os.path.join(data_path, context_path), "r", encoding='utf-8') as f:
         wiki = json.load(f)
@@ -246,7 +250,7 @@ def run_dense_retrieval(
     dataset = load_from_disk(os.path.join(data_path, "test_dataset"))
 
     train_args = TrainingArguments(
-        output_dir=model_args.save_dir,
+        output_dir=model_args.encoder_save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=model_args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
@@ -289,9 +293,11 @@ def run_dense_retrieval(
 
     # validation
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
-    print("finished DPR")
-    with open('retrieval_DPR_top'+str(data_args.top_k_retrieval)+'.pickle','wb') as fw:
+    print("DPR finished")
+    dpr_result_path = os.path.join("../data", f"retrieval_DPR_top{data_args.top_k_retrieval}.pickle")
+    with open(dpr_result_path,'wb') as fw:
         pickle.dump(datasets, fw)
+    print(f"{dpr_result_path}에 DPR_retrieval한 결과 저장")
 
     return datasets
 

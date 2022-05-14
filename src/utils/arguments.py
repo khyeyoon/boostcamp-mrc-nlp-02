@@ -52,14 +52,14 @@ class ModelArguments:
             "help": "Set how many negative samples to train"
         },
     )
-    save_dir: Optional[str] = field(
-        default="./dense_retrieval",
+    encoder_save_dir: Optional[str] = field(
+        default="../dpr_encoders",
         metadata={
             "help": "Set in which folder to save encoders"
         },
     )
     report_name: Optional[str] = field(
-        default=None,
+        default="",
         metadata={
             "help": "set wandb report name!"
         },
@@ -120,7 +120,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="/opt/ml/input/data/train_dataset",     # absolute path
+        default="../data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     retrieval_pickle_data: str = field(

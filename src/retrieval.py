@@ -36,7 +36,7 @@ class SparseRetrieval:
     def __init__(
         self,
         tokenize_fn,
-        data_path: Optional[str] = "/opt/ml/input/data/",
+        data_path: Optional[str] = "../data/",
         context_path: Optional[str] = "wikipedia_documents.json",
         mode:  Optional[str] = 'inference',
         retrieval:  Optional[str] = 'tfidf',
@@ -71,10 +71,10 @@ class SparseRetrieval:
             tokenizer=tokenize_fn, ngram_range=(1, 2), max_features=50000,
         )
         
-        print(data_path)
-        print(context_path)
+        wikipedia_path = os.path.join(data_path, context_path)
+        
         if mode == 'inference':
-            with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
+            with open(wikipedia_path, "r", encoding="utf-8") as f:
                 wiki = json.load(f)
             self.dataset = wiki
             self.contexts = list(
@@ -85,7 +85,7 @@ class SparseRetrieval:
             # self.BM25(self.dataset,topk=20)
 
         if mode != 'inference':
-            self.dataset = load_from_disk('../../data/train_dataset')['validation']
+            self.dataset = load_from_disk('../data/train_dataset')['validation']
 
             self.contexts = list(
                 dict.fromkeys([v["context"] for v in self.dataset])
@@ -133,7 +133,7 @@ class SparseRetrieval:
         )
 
         datasets = DatasetDict({"validation": Dataset.from_pandas(cqas, features=f)})
-        with open('bm25_top' + str(topk) + '.pickle', 'wb') as fw:
+        with open(f'../data/bm25_top{topk}.pickle', 'wb') as fw:
             pickle.dump(datasets, fw)
         print("BM25 저장 완료")
         return datasets

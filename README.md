@@ -140,22 +140,24 @@ python ./src/inference.py \
 
 `inference.py` 파일을 위 예시처럼 `--do_predict` 으로 실행하면 `--output_dir` 위치에 `predictions.json` 이라는 파일이 생성됩니다. 해당 파일을 제출해주시면 됩니다.
 
-## Things to know
+### Things to know
 
 1. `train.py` 에서 sparse embedding 을 훈련하고 저장하는 과정은 시간이 오래 걸리지 않아 따로 argument 의 default 가 True로 설정되어 있습니다. 실행 후 sparse_embedding.bin 과 tfidfv.bin 이 저장이 됩니다. **만약 sparse retrieval 관련 코드를 수정한다면, 꼭 두 파일을 지우고 다시 실행해주세요!** 안그러면 기존 파일이 load 됩니다.
 
 2. 모델의 경우 `--overwrite_cache` 를 추가하지 않으면 같은 폴더에 저장되지 않습니다. 
 
-3. `./outputs/` 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
+3. `--output_dir` 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
 
+# sh sample
+**<!주의>** sh 명령을 통해 실행하지 않을 경우, path가 정상적으로 작동되지 않을 수 있습니다.
 
-### dense_retrieval sample
+## dense_retrieval sample
 ```bash
 sh sample_dense_retrieval.sh
 ```
 <details>
 
-<summary> sample_dense_retrieval.sh </summary>
+**<summary> sample_dense_retrieval.sh </summary>**
 
 ```bash
 python ./src/dense_retrieval.py \
@@ -170,15 +172,13 @@ python ./src/dense_retrieval.py \
     
 </details>
 
-
-
-### train sample
+## train sample
 ```bash
 sh sample_train.sh
 ```
 <details>
     
-<summary> sample_train.sh </summary>
+**<summary> sample_train.sh </summary>**
 ```bash
 python ./src/train.py \
 --output_dir "../models/output" \
@@ -201,13 +201,13 @@ python ./src/train.py \
 
 
     
-### inference sample
+## inference sample
 ```bash
 sh sample_inference.sh
 ```
 <details>
    
-<summary> sample_inference.sh </summary>    
+**<summary> sample_inference.sh </summary>**
 ```bash
 python ./src/inference.py \
 --model_name_or_path "../models/output" \
@@ -221,3 +221,7 @@ python ./src/inference.py \
 ```
     
 </details>
+
+위의 순서대로 실행하면 학습(dpr, reader) 및 추론이 완료됩니다.
+
+sh file 내의 arguments를 변경시키며 여러 실험들을 진행할 수 있습니다.

@@ -101,7 +101,7 @@ data에 대한 argument 는 `arguments.py` 의 `DataTrainingArguments` 에서 �
 만약 arguments 에 대한 세팅을 직접하고 싶다면 `arguments.py` 를 참고해주세요. 
 ```bash
 python ./src/train.py \
---output_dir ../models/output \
+--output_dir "../models/output" \
 --do_train
 ```
 

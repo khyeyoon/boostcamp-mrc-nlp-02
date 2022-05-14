@@ -22,16 +22,44 @@ bash ./install/install_requirements.sh
 ### 저장소 구조
 
 ```bash
-./assets/                # readme 에 필요한 이미지 저장
-./install/               # 요구사항 설치 파일 
-./data/                  # 전체 데이터. 아래 상세 설명
-retrieval.py             # sparse retreiver 모듈 제공 
-arguments.py             # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
-trainer_qa.py            # MRC 모델 학습에 필요한 trainer 제공.
-utils_qa.py              # 기타 유틸 함수 제공 
+.
+├── code
+|   ├── assets                          # readme 에 필요한 이미지 저장
+|   │   ├── dataset.png
+|   │   ├── mrc.png
+|   │   └── odqa.png
+|   │
+|   ├── install                         # 요구사항 설치 파일
+|   │   └── install_requirements.sh
+|   |
+|   ├── src
+|   │   ├── utils
+|   │   |   ├── __init__.py
+|   │   |   ├── arguments.py            # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
+|   │   |   ├── model.py
+|   │   |   ├── trainer_qa.py           # MRC 모델 학습에 필요한 trainer 제공.
+|   │   |   └── utils_qa.py             # 기타 유틸 함수 제공 
+|   |   |
+|   │   ├── __init__.py
+|   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
+|   │   ├── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+|   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
+|   │   └── train.py
+|   |
+|   ├── .gitignore
+|   └── README.md
+|
+├── data                                # 전체 데이터, 데이터 소개에서 설명
+|   ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
+|   |   ├── train                       
+|   |   └── validation
+|   |   
+|   ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
+|   |   └── validation
+|   |
+|   └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
 
-train.py                 # MRC, Retrieval 모델 학습 및 평가 
-inference.py		     # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+
 ```
 
 ## 데이터 소개
@@ -43,10 +71,15 @@ inference.py		     # ODQA 모델 평가 또는 제출 파일 (predictions.json) 
 데이터셋은 편의성을 위해 Huggingface 에서 제공하는 datasets를 이용하여 pyarrow 형식의 데이터로 저장되어있습니다. 다음은 데이터셋의 구성입니다.
 
 ```bash
-./data/                        # 전체 데이터
-    ./train_dataset/           # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
-    ./test_dataset/            # 제출에 사용될 데이터셋. validation 으로 구성 
-    ./wikipedia_documents.json # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
+data                                # 전체 데이터
+├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
+|   ├── train                       
+|   └── validation
+|   
+├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
+|   └── validation
+|
+└── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
 ```
 
 data에 대한 argument 는 `arguments.py` 의 `DataTrainingArguments` 에서 확인 가능합니다. 
@@ -56,29 +89,6 @@ data에 대한 argument 는 `arguments.py` 의 `DataTrainingArguments` 에서 �
 ### train
 
 만약 arguments 에 대한 세팅을 직접하고 싶다면 `arguments.py` 를 참고해주세요. 
-
-roberta 모델을 사용할 경우 tokenizer 사용시 아래 함수의 옵션을 수정해야합니다.
-베이스라인은 klue/bert-base로 진행되니 이 부분의 주석을 해제하여 사용해주세요 ! 
-tokenizer는 train, validation (train.py), test(inference.py) 전처리를 위해 호출되어 사용됩니다.
-(tokenizer의 return_token_type_ids=False로 설정해주어야 함)
-
-```python
-# train.py
-def prepare_train_features(examples):
-        # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
-        # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
-        tokenized_examples = tokenizer(
-            examples[question_column_name if pad_on_right else context_column_name],
-            examples[context_column_name if pad_on_right else question_column_name],
-            truncation="only_second" if pad_on_right else "only_first",
-            max_length=max_seq_length,
-            stride=data_args.doc_stride,
-            return_overflowing_tokens=True,
-            return_offsets_mapping=True,
-            # return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
-            padding="max_length" if data_args.pad_to_max_length else False,
-        )
-```
 
 ```bash
 # DPR 학습 예시

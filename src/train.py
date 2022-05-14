@@ -3,6 +3,7 @@ import sys
 import logging
 from typing import NoReturn
 
+from functools import partial
 from datasets import DatasetDict, load_from_disk, load_metric
 from utils.utils_qa import check_no_error, postprocess_qa_predictions
 from utils.arguments import DataTrainingArguments, ModelArguments
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
+    # 가능한 arguments 들은 ./utils/arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
 
     parser = HfArgumentParser(
@@ -61,7 +62,6 @@ def main():
     # config, tokenizer, 모델 로드
     config, tokenizer, model = get_config_tokenizer_model(model_args)
 
-
     print(
         type(training_args),
         type(model_args),
@@ -82,7 +82,7 @@ def run_mrc(
     datasets: DatasetDict,
     tokenizer,
     model,
-) -> NoReturn:
+) -> None:
 
     # dataset을 전처리합니다.
     # training과 evaluation에서 사용되는 전처리는 아주 조금 다른 형태를 가집니다.
@@ -105,7 +105,7 @@ def run_mrc(
     )
 
     # Train preprocessing / 전처리를 진행합니다.
-    def prepare_train_features(examples):
+    def prepare_train_features(examples, is_not_roberta=False):
         # truncation과 padding(length가 짧을때만)을 통해 tokenization을 진행하며, stride를 이용하여 overflow를 유지합니다.
         # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
         tokenized_examples = tokenizer(
@@ -116,7 +116,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=is_not_roberta, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -182,14 +182,16 @@ def run_mrc(
 
         return tokenized_examples
 
+    is_not_roberta = "roberta" not in str(model).lower()
+    
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = datasets["train"]
-
+        
         # dataset에서 train feature를 생성합니다.
         train_dataset = train_dataset.map(
-            prepare_train_features,
+            partial(prepare_train_features, is_not_roberta=is_not_roberta),
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
@@ -197,7 +199,7 @@ def run_mrc(
         )
 
     # Validation preprocessing
-    def prepare_validation_features(examples):
+    def prepare_validation_features(examples, is_not_roberta=False):
         # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
         # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
         tokenized_examples = tokenizer(
@@ -208,7 +210,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=is_not_roberta, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -237,10 +239,10 @@ def run_mrc(
 
     if training_args.do_eval:
         eval_dataset = datasets["validation"]
-
+        
         # Validation Feature 생성
         eval_dataset = eval_dataset.map(
-            prepare_validation_features,
+            partial(prepare_validation_features, is_not_roberta=is_not_roberta),
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,

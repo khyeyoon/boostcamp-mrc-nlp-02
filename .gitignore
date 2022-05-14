@@ -7,12 +7,11 @@
 src/wandb
 src/*.pickle
 src/outputs
-
+/wandb
+/runs
 /models/
 nohup*
 *.pickle
-
-# 주엽 파일들
 finetune/
 finetune_result/
 output/

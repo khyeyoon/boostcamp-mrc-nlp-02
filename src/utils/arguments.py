@@ -123,6 +123,11 @@ class DataTrainingArguments:
         default="/opt/ml/input/data/train_dataset",     # absolute path
         metadata={"help": "The name of the dataset to use."},
     )
+    retrieval_pickle_data: str = field(
+        default="",
+        metadata={"help": "If you want to load retrieval pickle data that you already saved, enter the path for this value. "
+                  "If you don't, it will be run retrieval."}
+    )
     overwrite_cache: bool = field(
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets"},

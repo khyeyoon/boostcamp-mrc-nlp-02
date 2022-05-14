@@ -1,8 +1,6 @@
-# Readme
-
 ## 소개
 
-P stage 3 대회를 위한 베이스라인 코드 
+MRC 대회를 위한 베이스라인 코드 
 
 ## 설치 방법
 
@@ -23,12 +21,12 @@ bash ./install/install_requirements.sh
 
 ```bash
 .
-├── code
+├── code[github repository]
 |   ├── assets                          # readme 에 필요한 이미지 저장
 |   │   ├── dataset.png
 |   │   ├── mrc.png
 |   │   └── odqa.png
-|   │
+|   |
 |   ├── install                         # 요구사항 설치 파일
 |   │   └── install_requirements.sh
 |   |
@@ -41,24 +39,36 @@ bash ./install/install_requirements.sh
 |   │   |   └── utils_qa.py             # 기타 유틸 함수 제공 
 |   |   |
 |   │   ├── __init__.py
-|   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
-|   │   ├── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
 |   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
-|   │   └── train.py
+|   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
+|   │   ├── train.py
+|   │   └── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
 |   |
+|   ├── sample_dense_retrieval.sh       # dense_retrieval 실행 sample
+|   ├── sample_train.sh                 # train 실행 sample
+|   ├── sample_inference.sh             # inference 실행 sample
 |   ├── .gitignore
 |   └── README.md
 |
-└── data                                # 전체 데이터, 데이터 소개에서 설명
-    ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
-    |   ├── train                       
-    |   └── validation
-    |   
-    ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
-    |   └── validation
-    |
-    └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
-
+├── data                                # 전체 데이터, 데이터 소개에서 설명
+|   ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
+|   |   ├── train                       
+|   |   └── validation
+|   |   
+|   ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
+|   |   └── validation
+|   |
+|   └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
+|
+├── dpr_encoders                        # dpr encoder가 저장되는 dir
+|   ├── p_encoder     
+│   └── p_encoder
+|
+├── models                              # train 이후 model이 저장되는 dir
+│   └── output
+|
+└── predictions                         # inference 이후 예측값이 저장되는 dir
+    └── prediction
 
 ```
 
@@ -90,23 +100,19 @@ data에 대한 argument 는 `arguments.py` 의 `DataTrainingArguments` 에서 �
 
 만약 arguments 에 대한 세팅을 직접하고 싶다면 `arguments.py` 를 참고해주세요. 
 
-```bash
-# DPR 학습 예시
-python dense_retrieval.py --batch_size 4 --report_name BERT_neg3_bm2 --bm25 True --epochs 3 --num_neg 3 --bm_num 2 --dataset wiki --wandb False --test_query True --dpr_gradient_accumulation_steps 16
-```
-
 ### eval
 
 MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 예시에 단순히 `--do_eval` 을 추가로 입력해서 훈련 및 평가를 동시에 진행할 수도 있습니다.
 
 ```bash
 # 학습, mrc 모델 평가 예시 (train_dataset 사용)
-python train.py --output_dir ./models/train_dataset \
+python ./src/train.py \
+--output_dir "../models/output" \
 --per_device_train_batch_size 16 \
 --per_device_eval_batch_size 16 \
---eval_steps 10 --save_strategy steps --save_steps 500 \
+--eval_steps 100 --save_strategy steps --save_steps 100 \
 --evaluation_strategy steps \
---model_name_or_path klue/roberta-large \
+--model_name_or_path "klue/roberta-large" \
 --num_train_epochs 2 \
 --save_total_limit 3 \
 --greater_is_better True \
@@ -115,9 +121,14 @@ python train.py --output_dir ./models/train_dataset \
 --load_best_model_at_end True \
 --overwrite_output_dir True \
 --do_train --do_eval
+```
 
+```bash
 # mrc 모델 평가 (train_dataset 사용)
-# python train.py --output_dir ./outputs/train_dataset --model_name_or_path ./models/train_dataset/ --do_eval 
+# python train.py \
+--output_dir "../outputs/output" \
+--model_name_or_path "../models/output" \
+--do_eval 
 ```
 
 ### inference
@@ -131,12 +142,17 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 ```bash
 # ODQA 실행 (test_dataset 사용)
 # wandb 가 로그인 되어있다면 자동으로 결과가 wandb 에 저장됩니다. 아니면 단순히 출력됩니다
-python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
---report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
---model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 --fp16 \
---overwrite_output_dir True --do_predict
+python ./src/inference.py \
+--model_name_or_path "../models/output" \
+--output_dir "../predictions/prediction" \
+--dataset_name "../data/test_dataset" \
+--per_device_eval_batch_size 64
+--retrieval "both" \
+--fp16 \
+--top_k_retrieval 20 \
+--do_predict
 ```
-
+    
 ### How to submit
 
 `inference.py` 파일을 위 예시처럼 `--do_predict` 으로 실행하면 `--output_dir` 위치에 `predictions.json` 이라는 파일이 생성됩니다. 해당 파일을 제출해주시면 됩니다.
@@ -149,27 +165,76 @@ python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
 
 3. `./outputs/` 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
 
-### train ex
+
+### dense_retrieval sample
+```bash
+sh sample_dense_retrieval.sh
 ```
-python train.py --output_dir ./models/train_dataset \
+<details>
+
+<summary> sample_dense_retrieval.sh </summary>
+
+```bash
+python ./src/dense_retrieval.py \
+--batch_size 4 \
+--bm25 True \
+--epochs 3 \
+--num_neg 3 --bm_num 2 \
+--dataset "wiki" \
+--test_query True \
+--dpr_gradient_accumulation_steps 16
+```
+    
+</details>
+
+
+
+### train sample
+```bash
+sh sample_train.sh
+```
+<details>
+    
+<summary> sample_train.sh </summary>
+```bash
+python ./src/train.py \
+--output_dir "../models/output" \
 --per_device_train_batch_size 16 \
 --per_device_eval_batch_size 16 \
---eval_steps 10 --save_strategy steps --save_steps 500 \
+--eval_steps 100 --save_steps 100 --save_strategy steps \
 --evaluation_strategy steps \
---model_name_or_path klue/roberta-large \
+--model_name_or_path "klue/roberta-large" \
 --num_train_epochs 2 \
 --save_total_limit 3 \
 --greater_is_better True \
---metric_for_best_model exact_match \
+--metric_for_best_model "exact_match" \
 --fp16 True \
 --load_best_model_at_end True \
 --overwrite_output_dir True \
 --do_train --do_eval
 ```
-### inference ex
+
+</details>
+
+
+    
+### inference sample
+```bash
+sh sample_inference.sh
 ```
-python inference.py --output_dir ../outputs/roBERTa_step10_top20/ \
---report_name BERT_neg3_bm2 --retrieval dual --top_k_retrieval 50 --dataset_name ../../data/test_dataset/ \
---model_name_or_path ./models/train_dataset/ --per_device_eval_batch_size 64 \
---overwrite_output_dir True --do_predict
+<details>
+   
+<summary> sample_inference.sh </summary>    
+```bash
+python ./src/inference.py \
+--model_name_or_path "../models/output" \
+--output_dir "../predictions/prediction" \
+--dataset_name "../data/test_dataset" \
+--per_device_eval_batch_size 64 \
+--retrieval "both" \
+--fp16 \
+--top_k_retrieval 20 \
+--do_predict
 ```
+    
+</details>

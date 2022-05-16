@@ -83,14 +83,14 @@ bash ./install/install_requirements.sh
 데이터셋은 편의성을 위해 Huggingface 에서 제공하는 datasets를 이용하여 pyarrow 형식의 데이터로 저장되어있습니다. 다음은 데이터셋의 구성입니다.
 
 ```
-data                                # 전체 데이터
+data                                # 전체 데이터, 데이터 소개에서 설명
 ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
-|   ├── train                       
-|   └── validation
-|   
+│   ├── train                       
+│   └── validation
+│   
 ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
-|   └── validation
-|
+│   └── validation
+│
 └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
 ```
 

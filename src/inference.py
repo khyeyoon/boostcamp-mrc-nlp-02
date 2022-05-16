@@ -3,6 +3,7 @@ Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 
 대부분의 로직은 train.py 와 비슷하나 retrieval, predict 부분이 추가되어 있습니다.
 """
+from functools import partial
 import logging
 import sys
 from typing import Callable, Dict, List, NoReturn, Tuple
@@ -92,37 +93,40 @@ def main():
         config=config,
     )
 
-    # 여기서 retrieval 설정
-    if data_args.eval_retrieval:
+    if not data_args.retrieval_pickle_data:
+        # 여기서 retrieval 설정
+        if data_args.eval_retrieval:
+            if model_args.retrieval.upper() == 'TFIDF':
+                datasets = run_sparse_retrieval(
+                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf')
 
-        # pickle 파일 불러와서 사용할거면 if문 전체 주석처리!!
-        if model_args.retrieval == 'tfidf':
-            datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args, retrieval='tfidf', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
+            elif model_args.retrieval.upper() == 'DPR':
+                datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
 
-        elif model_args.retrieval == 'DPR':
-            datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-2]), data_args=data_args, model_args=model_args)
+            elif model_args.retrieval.upper() == 'BM25':
+                datasets = run_sparse_retrieval(
+                    tokenizer.tokenize, datasets, training_args, data_args, retrieval='BM25')
+            else:
+                # 둘 다 이용하기
+                print("retrieval : BM25 + DPR")
+                sparse_datasets = run_sparse_retrieval(
+                    tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25')
+                dense_datasets = run_dense_retrieval(training_args=training_args, data_args=data_args, model_args=model_args)
 
-        elif model_args.retrieval == 'BM25':
-            datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args, retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
-        else:
-            # 둘 다 이용하기
-            print("retrieval : BM25 + DPR")
-            sparse_datasets = run_sparse_retrieval(
-                tokenizer.tokenize, datasets, training_args, data_args,retrieval='BM25', data_path="/".join(data_args.dataset_name.split('/')[:-2]))
-            dense_datasets = run_dense_retrieval(training_args=training_args, data_path="/".join(data_args.dataset_name.split('/')[:-2]), data_args=data_args, model_args=model_args)
+                datasets=concat_retrieval(dense_datasets,sparse_datasets)
 
-            datasets=concat_retrieval(dense_datasets,sparse_datasets)
-
-        # 데이터셋 pickle 파일 저장하기
-        with open('retrieval.pickle','wb') as fw:
-            pickle.dump(datasets, fw)
-
-        #pickle 파일 불러와서 사용할 때 주석 풀기!
-        # with open('retrieval.pickle', 'rb') as fr:
-        #     datasets = pickle.load(fr)
-
+            # 데이터셋 pickle 파일 저장하기
+            with open('../data/retrieval.pickle','wb') as fw:
+                pickle.dump(datasets, fw)
+            print(f"../data/retrieval.pickle 에 전체 retrieval 결과 저장")    
+            
+    else:
+        print(f"{data_args.retrieval_pickle_data}를 불러옵니다.")
+        try:
+            with open(data_args.retrieval_pickle_data, 'rb') as fr:
+                datasets = pickle.load(fr)
+        except:
+            print(f"{data_args.retrieval_pickle_data}를 불러오는 데에 실패했습니다. --eval_retrieval를 통해 먼저 파일을 생성해주거나 명확한 경로를 입력해주세요.")
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
@@ -162,7 +166,7 @@ def run_sparse_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
-    data_path: str = "/opt/ml/input/data/",
+    data_path: str = "../data/",
     context_path: str = "wikipedia_documents.json",
     retrieval: str = "tfidf",
 ) -> DatasetDict:
@@ -233,9 +237,11 @@ def run_dense_retrieval(
     model_checkpoint = model_args.model_name_or_path
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-
-    p_encoder = BertEncoder.from_pretrained("./dense_retrieval/p_encoder-" + model_args.report_name).to(device)
-    q_encoder = BertEncoder.from_pretrained("./dense_retrieval/q_encoder-" + model_args.report_name).to(device)
+    p_encoder_path = os.path.join(model_args.encoder_save_dir, "p_encoder")
+    q_encoder_path = os.path.join(model_args.encoder_save_dir, "q_encoder")
+    
+    p_encoder = BertEncoder.from_pretrained(p_encoder_path).to(device)
+    q_encoder = BertEncoder.from_pretrained(q_encoder_path).to(device)
 
     with open(os.path.join(data_path, context_path), "r", encoding='utf-8') as f:
         wiki = json.load(f)
@@ -244,7 +250,7 @@ def run_dense_retrieval(
     dataset = load_from_disk(os.path.join(data_path, "test_dataset"))
 
     train_args = TrainingArguments(
-        output_dir=model_args.save_dir,
+        output_dir=model_args.encoder_save_dir,
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=model_args.batch_size, # 아슬아슬합니다. 작게 쓰세요 !
@@ -287,9 +293,11 @@ def run_dense_retrieval(
 
     # validation
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
-    print("finished DPR")
-    with open('retrieval_DPR_top'+str(data_args.top_k_retrieval)+'.pickle','wb') as fw:
+    print("DPR finished")
+    dpr_result_path = os.path.join("../data", f"retrieval_DPR_top{data_args.top_k_retrieval}.pickle")
+    with open(dpr_result_path,'wb') as fw:
         pickle.dump(datasets, fw)
+    print(f"{dpr_result_path}에 DPR_retrieval한 결과 저장")
 
     return datasets
 
@@ -321,7 +329,7 @@ def run_mrc(
     )
 
     # Validation preprocessing / 전처리를 진행합니다.
-    def prepare_validation_features(examples):
+    def prepare_validation_features(examples, is_not_roberta=False):
         # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
         # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
         tokenized_examples = tokenizer(
@@ -332,7 +340,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=is_not_roberta, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -360,10 +368,12 @@ def run_mrc(
         return tokenized_examples
 
     eval_dataset = datasets["validation"]
+    
+    is_not_roberta = "roberta" not in str(model).lower()
 
     # Validation Feature 생성
     eval_dataset = eval_dataset.map(
-        prepare_validation_features,
+        partial(prepare_validation_features, is_not_roberta=is_not_roberta),
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
         remove_columns=column_names,

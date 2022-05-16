@@ -62,7 +62,7 @@ bash ./install/install_requirements.sh
 |
 ├── dpr_encoders                        # dpr encoder가 저장되는 dir
 |   ├── p_encoder     
-│   └── p_encoder
+│   └── q_encoder
 |
 ├── models                              # train 이후 model이 저장되는 dir
 │   └── output

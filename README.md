@@ -42,7 +42,8 @@ bash ./install/install_requirements.sh
 │   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
 │   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
 │   │   ├── train.py
-│   │   └── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+│   │   ├── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+│   │   └── permutation_sentences.py    # permutation sentences dataset 생성
 │   │
 │   ├── sample_dense_retrieval.sh       # dense_retrieval 실행 sample
 │   ├── sample_train.sh                 # train 실행 sample

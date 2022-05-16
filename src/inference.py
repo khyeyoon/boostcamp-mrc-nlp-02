@@ -136,7 +136,7 @@ def remove_overlap(text):
     text_arr = list(set(text.split('\n' + "="*150 + '\n')))
     return (' @단락 끝@ @단락 시작@ ').join(text_arr)
 
-def concat_retrieval(sparse_retrieval,dense_retrieval):
+def concat_retrieval(sparse_retrieval, dense_retrieval):
     total = []
     for index in range(len(sparse_retrieval['validation'])):
         tmp = {}

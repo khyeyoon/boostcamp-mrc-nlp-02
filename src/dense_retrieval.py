@@ -73,7 +73,7 @@ class DenseRetrieval:
             self.prepare_in_batch_negative()
 
         else:
-            # infernce를 위한 passages 임베딩 시 수행 (default=train)
+            # inference를 위한 passages 임베딩 시 수행 (default=train)
             if mode == 'inference':
                 self.get_dense_embedding(dataset)
             else:
@@ -536,7 +536,7 @@ def main(args):
     p_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
     q_encoder = BertEncoder.from_pretrained(model_checkpoint).to(train_args.device)
 
-    retriever = DenseRetrieval(args=[train_args, args], dataset=train_dataset, bm25=args.bm25 ,num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
+    retriever = DenseRetrieval(args=[train_args, args], dataset=train_dataset, bm25=args.bm25, num_neg=args.num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder)
     retriever.train()
 
     if args.test_query == 'True':

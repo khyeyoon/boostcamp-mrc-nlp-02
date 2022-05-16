@@ -15,7 +15,7 @@ from transformers import (
     AutoTokenizer,
     ElectraTokenizer,
     ElectraModel,
-    #ElectraModelForQuestionAnswering,
+    ElectraForQuestionAnswering,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,

@@ -22,53 +22,54 @@ bash ./install/install_requirements.sh
 ```
 .
 ├── code[github repository]
-|   ├── assets                          # readme 에 필요한 이미지 저장
-|   │   ├── dataset.png
-|   │   ├── mrc.png
-|   │   └── odqa.png
-|   |
-|   ├── install                         # 요구사항 설치 파일
-|   │   └── install_requirements.sh
-|   |
-|   ├── src
-|   │   ├── utils
-|   │   |   ├── __init__.py
-|   │   |   ├── arguments.py            # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
-|   │   |   ├── model.py
-|   │   |   ├── trainer_qa.py           # MRC 모델 학습에 필요한 trainer 제공.
-|   │   |   └── utils_qa.py             # 기타 유틸 함수 제공 
-|   |   |
-|   │   ├── __init__.py
-|   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
-|   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
-|   │   ├── train.py
-|   │   └── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
-|   |
-|   ├── sample_dense_retrieval.sh       # dense_retrieval 실행 sample
-|   ├── sample_train.sh                 # train 실행 sample
-|   ├── sample_inference.sh             # inference 실행 sample
-|   ├── .gitignore
-|   └── README.md
-|
+│   ├── assets                          # readme 에 필요한 이미지 저장
+│   │   ├── dataset.png
+│   │   ├── mrc.png
+│   │   └── odqa.png
+│   │
+│   ├── install                         # 요구사항 설치 파일
+│   │   └── install_requirements.sh
+│   │
+│   ├── src
+│   │   ├── utils
+│   │   │   ├── __init__.py
+│   │   │   ├── arguments.py            # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
+│   │   │   ├── model.py
+│   │   │   ├── trainer_qa.py           # MRC 모델 학습에 필요한 trainer 제공.
+│   │   │   └── utils_qa.py             # 기타 유틸 함수 제공 
+│   │   │
+│   │   ├── __init__.py
+│   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
+│   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
+│   │   ├── train.py
+│   │   └── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
+│   │
+│   ├── sample_dense_retrieval.sh       # dense_retrieval 실행 sample
+│   ├── sample_train.sh                 # train 실행 sample
+│   ├── sample_inference.sh             # inference 실행 sample
+│   ├── .gitignore
+│   └── README.md
+│
 ├── data                                # 전체 데이터, 데이터 소개에서 설명
-|   ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
-|   |   ├── train                       
-|   |   └── validation
-|   |   
-|   ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
-|   |   └── validation
-|   |
-|   └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
-|
+│   ├── train_dataset                   # 학습에 사용할 데이터셋. train 과 validation 으로 구성 
+│   │   ├── train                       
+│   │   └── validation
+│   │   
+│   ├── test_dataset                    # 제출에 사용될 데이터셋. validation 으로 구성 
+│   │   └── validation
+│   │
+│   └── wikipedia_documents.json        # 위키피디아 문서 집합. retrieval을 위해 쓰이는 corpus.
+│
 ├── dpr_encoders                        # dpr encoder가 저장되는 dir
-|   ├── p_encoder     
+│   ├── p_encoder     
 │   └── q_encoder
-|
+│
 ├── models                              # train 이후 model이 저장되는 dir
 │   └── output
-|
+│
 └── predictions                         # inference 이후 예측값이 저장되는 dir
     └── prediction
+
 
 ```
 

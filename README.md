@@ -41,6 +41,7 @@ bash ./install/install_requirements.sh
 │   │   ├── __init__.py
 │   │   ├── retrieval.py                # sparse retreiver 모듈 제공 
 │   │   ├── dense_retrieval.py          # dense retreiver 모듈 제공 
+│   │   ├── elasticsearch.ipynb         # elasticsearch
 │   │   ├── train.py
 │   │   ├── inference.py                # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
 │   │   └── permutation_sentences.py    # permutation sentences dataset 생성

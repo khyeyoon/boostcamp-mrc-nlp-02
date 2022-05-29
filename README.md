@@ -1,6 +1,12 @@
-## 소개
+# [네이버 부스트캠프 AI Tech 3기] Open-Domain Question Answering Competition
 
-MRC 대회를 위한 베이스라인 코드 
+## 대회 주제
+
+위키독스 문서로 구성된 데이터셋을 이용하여 Open-Domain Question Answering 수행
+
+본 대회에 대한 세부적인 내용은 아래 링크를 통해 확인하실 수 있습니다.
+
+https://guiltless-tiglon-d23.notion.site/MRC-Wrap-Up-Report-49e12231b46d4bc2b0ad2a8076d2401b
 
 ## 설치 방법
 
